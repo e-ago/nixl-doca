@@ -223,14 +223,18 @@ PYBIND11_MODULE(nixl_bindings, m) {
                                uintptr_t remote_side,
                                const std::vector<int> &remote_indices,
                                const std::string &notif_msg,
-                               const nixl_xfer_op_t &operation) -> uintptr_t {
+                               const nixl_xfer_op_t &operation,
+                               bool merge_descs) -> uintptr_t {
                     nixlXferReqH* handle;
                     nixl_status_t ret = agent.makeXferReq((nixlXferSideH*) local_side, local_indices,
                                                           (nixlXferSideH*) remote_side, remote_indices,
-                                                          notif_msg, operation, handle);
+                                                          notif_msg, operation, handle, merge_descs);
                     if (ret != NIXL_SUCCESS) return (uintptr_t) nullptr;
                     else return (uintptr_t) handle;
-                })
+                }, py::arg("local_side"), py::arg("local_indices"),
+                   py::arg("remote_side"), py::arg("remote_indices"),
+                   py::arg("notif_msg"), py::arg("operation"),
+                   py::arg("merge_descs") = false )
         .def("invalidateXferReq", [](nixlAgent &agent, uintptr_t reqh) -> void {
                     agent.invalidateXferReq((nixlXferReqH*) reqh);
                 })
