@@ -17,6 +17,8 @@ import pickle
 
 import torch
 
+from typing import Optional
+
 import nixl._bindings as nixlBind
 
 
@@ -31,7 +33,7 @@ class nixl_agent:
     def __init__(
         self,
         agent_name: str,
-        nixl_conf: nixl_agent_config = None,
+        nixl_conf: Optional[nixl_agent_config] = None,
         instantiate_all: bool = False,
     ):
         if nixl_conf and instantiate_all:
@@ -47,27 +49,27 @@ class nixl_agent:
         self.agent = nixlBind.nixlAgent(agent_name, agent_config)
 
         self.name = agent_name
-        self.notifs = {}
-        self.backends = {}
-        self.backend_mems = {}
-        self.backend_options = {}
+        self.notifs: dict[str, list] = {}
+        self.backends: dict[str, int] = {}
+        self.backend_mems: dict[str, list] = {}
+        self.backend_options: dict[str, dict] = {}
 
         self.plugin_list = self.agent.getAvailPlugins()
         if len(self.plugin_list) == 0:
             print("No plugins available, cannot start transfers!")
             raise RuntimeError("No plugins available for NIXL, cannot start transfers!")
 
-        self.plugin_b_options = {}
-        self.plugin_mem_types = {}
+        self.plugin_b_options: dict[str, dict] = {}
+        self.plugin_mem_types: dict[str, list] = {}
         for plugin in self.plugin_list:
             (backend_options, mem_types) = self.agent.getPluginParams(plugin)
             self.plugin_b_options[plugin] = backend_options
             self.plugin_mem_types[plugin] = mem_types
 
-        init = {}
+        # TODO: populate init from default parameters, or define a set of params in python
+        init: dict[str, str] = {}
 
         if instantiate_all:
-            # TODO: populate init from default parameters, or define a set of params in python
             for plugin in self.plugin_list:
                 self.backends[plugin] = self.agent.createBackend(plugin, init)
         else:
@@ -153,9 +155,9 @@ class nixl_agent:
     def register_memory(
         self,
         reg_list,
-        mem_type: str = None,
+        mem_type: Optional[str] = None,
         is_sorted: bool = False,
-        backend: str = None,
+        backend: Optional[str] = None,
     ):
         reg_descs = self.get_reg_descs(reg_list, mem_type, is_sorted)
 
@@ -171,7 +173,9 @@ class nixl_agent:
 
     # The output from get_reg_descs (which is later passed to register_memory for
     # registration) or direct output of register_memory is passed here
-    def deregister_memory(self, dereg_list: nixlBind.nixlRegDList, backend: str = None):
+    def deregister_memory(
+        self, dereg_list: nixlBind.nixlRegDList, backend: Optional[str] = None
+    ):
         # based on backend type and mem_type, figure what deregistrations are needed
         if backend:
             ret = self.agent.deregisterMem(dereg_list, self.backends[backend])
@@ -193,9 +197,9 @@ class nixl_agent:
         self,
         remote_agent: str,
         xfer_list,
-        mem_type: str = None,
+        mem_type: Optional[str] = None,
         is_sorted: bool = False,
-        xfer_backend: str = None,
+        xfer_backend: Optional[str] = None,
     ):
         descs = self.get_xfer_descs(xfer_list, mem_type, is_sorted)
         if xfer_backend:
@@ -248,7 +252,7 @@ class nixl_agent:
         remote_descs: nixlBind.nixlXferDList,
         remote_agent: str,
         notif_msg: str = "",
-        xfer_backend: str = None,
+        xfer_backend: Optional[str] = None,
     ):
         op = self.nixl_ops[operation]
         if op:
@@ -294,8 +298,8 @@ class nixl_agent:
 
     # do we even need this function?
     # I feel like we don't want python users dealing with backend handles
-    def query_xfer_backend(self, backend: str):
-        b_handle = self.agent.queryXferBackend(backend)
+    def query_xfer_backend(self, handle: int):
+        b_handle = self.agent.queryXferBackend(handle)
         # this works because there should not be multiple matching handles in the Dict
         return next(
             backendS for backendS, backendH in self.backends if backendH == b_handle
@@ -354,7 +358,7 @@ class nixl_agent:
     def get_xfer_descs(
         self,
         descs,
-        mem_type: bool = None,
+        mem_type: Optional[str] = None,
         is_sorted: bool = False,
     ):
         # can add check for DLPack input
@@ -415,7 +419,7 @@ class nixl_agent:
     def get_reg_descs(
         self,
         descs,
-        mem_type: bool = None,
+        mem_type: Optional[str] = None,
         is_sorted: bool = False,
     ):
         # can add check for DLPack input
