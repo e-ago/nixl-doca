@@ -14,10 +14,9 @@
 # limitations under the License.
 
 import pickle
+from typing import Optional
 
 import torch
-
-from typing import Optional
 
 import nixl._bindings as nixlBind
 
@@ -302,7 +301,9 @@ class nixl_agent:
         b_handle = self.agent.queryXferBackend(handle)
         # this works because there should not be multiple matching handles in the Dict
         return next(
-            backendS for backendS, backendH in self.backends if backendH == b_handle
+            backendS
+            for backendS, backendH in self.backends.items()
+            if backendH == b_handle
         )
 
     def release_xfer_handle(self, handle: int):
