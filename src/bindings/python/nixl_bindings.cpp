@@ -312,22 +312,23 @@ PYBIND11_MODULE(_bindings, m) {
         .def("registerMem", [](nixlAgent &agent, nixl_reg_dlist_t descs, uintptr_t backend) -> nixl_status_t {
                     nixl_opt_args_t extra_params;
                     nixl_status_t ret;
-                    if(backend != 0)
+                    if(backend != (uintptr_t) nullptr)
                         extra_params.backends.push_back((nixlBackendH*) backend);
 
                     ret = agent.registerMem(descs, &extra_params);
                     throw_nixl_exception(ret);
                     return ret;
-                })
+                }, py::arg("descs"), py::arg("backend") = (uintptr_t) nullptr)
         .def("deregisterMem", [](nixlAgent &agent, nixl_reg_dlist_t descs, uintptr_t backend) -> nixl_status_t {
                     nixl_opt_args_t extra_params;
                     nixl_status_t ret;
-                    extra_params.backends.push_back((nixlBackendH*) backend);
+                    if(backend != (uintptr_t) nullptr)
+                        extra_params.backends.push_back((nixlBackendH*) backend);
 
                     ret = agent.deregisterMem(descs, &extra_params);
                     throw_nixl_exception(ret);
                     return ret;
-                })
+                }, py::arg("descs"), py::arg("backend") = (uintptr_t) nullptr)
         .def("makeConnection", [](nixlAgent &agent, const std::string &remote_agent) {
                     nixl_status_t ret = agent.makeConnection(remote_agent);
                     throw_nixl_exception(ret);
@@ -342,8 +343,10 @@ PYBIND11_MODULE(_bindings, m) {
                                  uintptr_t backend) -> uintptr_t {
                     nixlXferReqH* handle = nullptr;
                     nixl_opt_args_t extra_params;
-                    if (backend!=0)
+
+                    if (backend != (uintptr_t) nullptr)
                         extra_params.backends.push_back((nixlBackendH*) backend);
+
                     if (notif_msg.size()>0) {
                         extra_params.notifMsg = notif_msg;
                         extra_params.hasNotif = true;
@@ -367,11 +370,13 @@ PYBIND11_MODULE(_bindings, m) {
                                 uintptr_t backend) -> uintptr_t {
                     nixlDlistH* handle = nullptr;
                     nixl_opt_args_t extra_params;
-                    extra_params.backends.push_back((nixlBackendH*) backend);
+                    if(backend != (uintptr_t) nullptr)
+                        extra_params.backends.push_back((nixlBackendH*) backend);
+
                     throw_nixl_exception(agent.prepXferDlist(remote_agent, descs, handle, &extra_params));
 
                     return (uintptr_t) handle;
-                })
+                }, py::arg("remote_agent"), py::arg("descs"), py::arg("backend") = (uintptr_t) nullptr)
         .def("makeXferReq", [](nixlAgent &agent,
                                const nixl_xfer_op_t &operation,
                                uintptr_t local_side,

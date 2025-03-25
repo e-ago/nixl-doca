@@ -28,7 +28,12 @@ class nixl_agent_config:
 
 
 class nixl_agent:
-    def __init__(self, agent_name, nixl_conf=None, instantiate_all=False):
+    def __init__(
+        self,
+        agent_name: str,
+        nixl_conf: nixl_agent_config = None,
+        instantiate_all: bool = False,
+    ):
         if nixl_conf and instantiate_all:
             instantiate_all = False
             print(
@@ -100,21 +105,21 @@ class nixl_agent:
     def get_plugin_list(self):
         return self.plugin_list
 
-    def get_plugin_mem_types(self, backend):
+    def get_plugin_mem_types(self, backend: str):
         if backend in self.plugin_mem_types:
             return self.plugin_mem_types[backend]
         else:
             print("Plugin", backend, "is not available to get its supported mem types.")
             return None
 
-    def get_plugin_params(self, backend):
+    def get_plugin_params(self, backend: str):
         if backend in self.plugin_b_options:
             return self.plugin_b_options[backend]
         else:
             print("Plugin", backend, "is not available to get its parameters.")
             return None
 
-    def get_backend_mem_types(self, backend):
+    def get_backend_mem_types(self, backend: str):
         if backend in self.backend_mems:
             return self.backend_mems[backend]
         else:
@@ -123,14 +128,15 @@ class nixl_agent:
             )
             return None
 
-    def get_backend_params(self, backend):
+    def get_backend_params(self, backend: str):
         if backend in self.backend_options:
             return self.backend_options[backend]
         else:
             print("Backend", backend, "not instantiated to get its parameters.")
             return None
 
-    def create_backend(self, backend, initParams={}):
+    # initParams is a Dict of strings (input params) to strings (values)
+    def create_backend(self, backend: str, initParams: dict = {}):
         self.backends[backend] = self.agent.createBackend(backend, initParams)
 
         (backend_options, mem_types) = self.agent.getBackendParams(
@@ -147,9 +153,9 @@ class nixl_agent:
     def register_memory(
         self,
         reg_list,
-        mem_type=None,
-        is_sorted=False,
-        backend=None,
+        mem_type: str = None,
+        is_sorted: bool = False,
+        backend: str = None,
     ):
         reg_descs = self.get_reg_descs(reg_list, mem_type, is_sorted)
 
@@ -157,23 +163,7 @@ class nixl_agent:
         if backend:
             ret = self.agent.registerMem(reg_descs, self.backends[backend])
         else:
-            # TODO: rely on underlying capability to register with all when supported
-            if (reg_descs.getType() == nixlBind.FILE_SEG) and ("GDS" in self.backends):
-                ret = self.agent.registerMem(reg_descs, self.backends["GDS"])
-            elif (reg_descs.getType() == nixlBind.DRAM_SEG) and (
-                "UCX" in self.backends
-            ):
-                ret = self.agent.registerMem(reg_descs, self.backends["UCX"])
-            elif (reg_descs.getType() == nixlBind.VRAM_SEG) and (
-                "UCX" in self.backends
-            ):
-                ret = self.agent.registerMem(reg_descs, self.backends["UCX"])
-            elif (reg_descs.getType() == nixlBind.VRAM_SEG) and (
-                "GDS" in self.backends
-            ):
-                ret = self.agent.registerMem(reg_descs, self.backends["GDS"])
-            else:
-                return None
+            ret = self.agent.registerMem(reg_descs)
 
         if ret != 0:
             return None
@@ -181,28 +171,12 @@ class nixl_agent:
 
     # The output from get_reg_descs (which is later passed to register_memory for
     # registration) or direct output of register_memory is passed here
-    def deregister_memory(self, dereg_list, backend=None):
+    def deregister_memory(self, dereg_list: nixlBind.nixlRegDList, backend: str = None):
         # based on backend type and mem_type, figure what deregistrations are needed
         if backend:
-            self.agent.deregisterMem(dereg_list, self.backends[backend])
+            ret = self.agent.deregisterMem(dereg_list, self.backends[backend])
         else:
-            # TODO: rely on underlying capability to register with all when supported
-            if (dereg_list.getType() == nixlBind.FILE_SEG) and ("GDS" in self.backends):
-                ret = self.agent.deregisterMem(dereg_list, self.backends["GDS"])
-            elif (dereg_list.getType() == nixlBind.DRAM_SEG) and (
-                "UCX" in self.backends
-            ):
-                ret = self.agent.deregisterMem(dereg_list, self.backends["UCX"])
-            elif (dereg_list.getType() == nixlBind.VRAM_SEG) and (
-                "UCX" in self.backends
-            ):
-                ret = self.agent.deregisterMem(dereg_list, self.backends["UCX"])
-            elif (dereg_list.getType() == nixlBind.VRAM_SEG) and (
-                "GDS" in self.backends
-            ):
-                ret = self.agent.deregisterMem(dereg_list, self.backends["GDS"])
-            else:
-                return None
+            ret = self.agent.deregisterMem(dereg_list)
 
         if ret != 0:
             return None
@@ -210,56 +184,42 @@ class nixl_agent:
         return dereg_list
 
     # Optional proactive make connection
-    def make_connection(self, remote_agent):
+    def make_connection(self, remote_agent: str):
         self.agent.makeConnection(remote_agent)
 
     # "" remote agent means local. example xfer can be used to know the backend
+    # xfer_list can be any of the types supported by get_xfer_descs
     def prep_xfer_dlist(
         self,
-        remote_agent,
+        remote_agent: str,
         xfer_list,
-        mem_type=None,
-        is_sorted=False,
-        xfer_backend=None,
+        mem_type: str = None,
+        is_sorted: bool = False,
+        xfer_backend: str = None,
     ):
         descs = self.get_xfer_descs(xfer_list, mem_type, is_sorted)
         if xfer_backend:
-            handle = self.agent.prepXferDlist(remote_agent, descs, xfer_backend)
+            handle = self.agent.prepXferDlist(
+                remote_agent, descs, self.backends[xfer_backend]
+            )
         else:
-            # TODO: rely on underlying capability to register with all when supported
-            if (descs.getType() == nixlBind.FILE_SEG) and ("GDS" in self.backends):
-                handle = self.agent.prepXferDlist(
-                    remote_agent, descs, self.backends["GDS"]
-                )
-            elif (descs.getType() == nixlBind.DRAM_SEG) and ("UCX" in self.backends):
-                handle = self.agent.prepXferDlist(
-                    remote_agent, descs, self.backends["UCX"]
-                )
-            elif (descs.getType() == nixlBind.VRAM_SEG) and ("UCX" in self.backends):
-                handle = self.agent.prepXferDlist(
-                    remote_agent, descs, self.backends["UCX"]
-                )
-            elif (descs.getType() == nixlBind.VRAM_SEG) and ("GDS" in self.backends):
-                handle = self.agent.prepXferDlist(
-                    remote_agent, descs, self.backends["GDS"]
-                )
-            else:
-                return None
+            handle = self.agent.prepXferDlist(remote_agent, descs)
 
         if handle == 0:
             return None
 
         return handle
 
+    # xfer_side parameters are opaque NIXL handles
     def make_prepped_xfer(
         self,
-        operation,
-        local_xfer_side,
-        local_indices,
-        remote_xfer_side,
-        remote_indices,
-        notif_msg="",
-        skip_desc_merge=False,
+        operation: str,
+        local_xfer_side: int,
+        local_indices: list,
+        remote_xfer_side: int,
+        remote_indices: list,
+        notif_msg: str = "",
+        skip_desc_merge: bool = False,
     ):
         op = self.nixl_ops[operation]
         if op:
@@ -277,16 +237,18 @@ class nixl_agent:
 
             return handle
         else:
+            # maybe we should just make these throw exceptions
             return None
 
+    # odd that we allow prep_xfer_dlist to be any list, but not here
     def initialize_xfer(
         self,
-        operation,
-        local_descs,
-        remote_descs,
-        remote_agent,
-        notif_msg="",
-        xfer_backend=None,
+        operation: str,
+        local_descs: nixlBind.nixlXferDList,
+        remote_descs: nixlBind.nixlXferDList,
+        remote_agent: str,
+        notif_msg: str = "",
+        xfer_backend: str = None,
     ):
         op = self.nixl_ops[operation]
         if op:
@@ -310,7 +272,8 @@ class nixl_agent:
         else:
             return None
 
-    def transfer(self, handle, notif_msg=""):
+    # handle is an opaque NIXL handle
+    def transfer(self, handle: int, notif_msg: str = ""):
         status = self.agent.postXferReq(handle, notif_msg)
         if status == nixlBind.NIXL_SUCCESS:
             return "DONE"
@@ -319,7 +282,8 @@ class nixl_agent:
         else:
             return "ERR"
 
-    def check_xfer_state(self, handle):
+    # handle is an opaque NIXL handle
+    def check_xfer_state(self, handle: int):
         status = self.agent.getXferStatus(handle)
         if status == nixlBind.NIXL_SUCCESS:
             return "DONE"
@@ -328,18 +292,20 @@ class nixl_agent:
         else:
             return "ERR"
 
-    def query_xfer_backend(self, handle):
-        b_handle = self.agent.queryXferBackend(handle)
+    # do we even need this function?
+    # I feel like we don't want python users dealing with backend handles
+    def query_xfer_backend(self, backend: str):
+        b_handle = self.agent.queryXferBackend(backend)
         # this works because there should not be multiple matching handles in the Dict
         return next(
             backendS for backendS, backendH in self.backends if backendH == b_handle
         )
 
-    def release_xfer_handle(self, handle):
+    def release_xfer_handle(self, handle: int):
         # frees the handle too
         self.agent.releaseXferReq(handle)
 
-    def release_dlist_handle(self, handle):
+    def release_dlist_handle(self, handle: int):
         # frees the handle too
         self.agent.releasedDlistH(handle)
 
@@ -353,7 +319,7 @@ class nixl_agent:
         return self.notifs
 
     # Only removes the specific notification from self.notifs
-    def check_remote_xfer_done(self, remote_agent_name, lookup_msg):
+    def check_remote_xfer_done(self, remote_agent_name: str, lookup_msg: str):
         self.notifs = self.agent.getNotifs(self.notifs)  # Adds new notifs
         message = None
         if remote_agent_name in self.notifs:
@@ -366,18 +332,18 @@ class nixl_agent:
         return message
 
     # Extra notification APIs
-    def send_notif(self, remote_agent_name, notif_msg):
+    def send_notif(self, remote_agent_name: str, notif_msg: str):
         # To be updated when automatic backend selection is supported
         self.agent.genNotif(remote_agent_name, notif_msg, self.backends["UCX"])
 
     def get_agent_metadata(self):
         return self.agent.getLocalMD()
 
-    def add_remote_agent(self, metadata):
+    def add_remote_agent(self, metadata: bytes):
         agent_name = self.agent.loadRemoteMD(metadata)
         return agent_name
 
-    def remove_remote_agent(self, agent):
+    def remove_remote_agent(self, agent: str):
         self.agent.invalidateRemoteMD(agent)
 
     # 4 methods to create and serialize/deserialize descriptors, provided through Agent
@@ -385,7 +351,12 @@ class nixl_agent:
     # For descs, it gets a) list of 3 element tuples, b) a tensor, c) a list
     # of tensors, or d) passes along if an xfer_dlist is given. The other 3
     # optional parameters are dlist options.
-    def get_xfer_descs(self, descs, mem_type=None, is_sorted=False):
+    def get_xfer_descs(
+        self,
+        descs,
+        mem_type: bool = None,
+        is_sorted: bool = False,
+    ):
         # can add check for DLPack input
 
         if isinstance(descs, nixlBind.nixlXferDList):
@@ -441,7 +412,12 @@ class nixl_agent:
     # For descs, it gets a) list of 4 element tuples, b) a tensor, c) a list
     # of tensors, or d) passes along if an xfer_dlist is given. The other 3
     # optional parameters are dlist options.
-    def get_reg_descs(self, descs, mem_type=None, is_sorted=False):
+    def get_reg_descs(
+        self,
+        descs,
+        mem_type: bool = None,
+        is_sorted: bool = False,
+    ):
         # can add check for DLPack input
 
         if isinstance(descs, nixlBind.nixlRegDList):
@@ -494,6 +470,7 @@ class nixl_agent:
 
         return new_descs
 
+    # descs can be any List or NIXL DList type
     def get_serialized_descs(self, descs):
         return pickle.dumps(descs)
 
