@@ -309,26 +309,26 @@ PYBIND11_MODULE(_bindings, m) {
                     throw_nixl_exception(agent.createBackend(type, initParams, backend));
                     return (uintptr_t) backend;
             })
-        .def("registerMem", [](nixlAgent &agent, nixl_reg_dlist_t descs, uintptr_t backend) -> nixl_status_t {
+        .def("registerMem", [](nixlAgent &agent, nixl_reg_dlist_t descs, std::vector<uintptr_t> backends) -> nixl_status_t {
                     nixl_opt_args_t extra_params;
                     nixl_status_t ret;
-                    if(backend != (uintptr_t) nullptr)
+                    for(uintptr_t backend: backends)
                         extra_params.backends.push_back((nixlBackendH*) backend);
 
                     ret = agent.registerMem(descs, &extra_params);
                     throw_nixl_exception(ret);
                     return ret;
-                }, py::arg("descs"), py::arg("backend") = (uintptr_t) nullptr)
-        .def("deregisterMem", [](nixlAgent &agent, nixl_reg_dlist_t descs, uintptr_t backend) -> nixl_status_t {
+                }, py::arg("descs"), py::arg("backends") = std::vector<uintptr_t>({}))
+        .def("deregisterMem", [](nixlAgent &agent, nixl_reg_dlist_t descs, std::vector<uintptr_t> backends) -> nixl_status_t {
                     nixl_opt_args_t extra_params;
                     nixl_status_t ret;
-                    if(backend != (uintptr_t) nullptr)
+                    for(uintptr_t backend: backends)
                         extra_params.backends.push_back((nixlBackendH*) backend);
 
                     ret = agent.deregisterMem(descs, &extra_params);
                     throw_nixl_exception(ret);
                     return ret;
-                }, py::arg("descs"), py::arg("backend") = (uintptr_t) nullptr)
+                }, py::arg("descs"), py::arg("backends") = std::vector<uintptr_t>({}))
         .def("makeConnection", [](nixlAgent &agent, const std::string &remote_agent) {
                     nixl_status_t ret = agent.makeConnection(remote_agent);
                     throw_nixl_exception(ret);
@@ -340,11 +340,11 @@ PYBIND11_MODULE(_bindings, m) {
                                  const nixl_xfer_dlist_t &remote_descs,
                                  const std::string &remote_agent,
                                  const std::string &notif_msg,
-                                 uintptr_t backend) -> uintptr_t {
+                                 std::vector<uintptr_t> backends) -> uintptr_t {
                     nixlXferReqH* handle = nullptr;
                     nixl_opt_args_t extra_params;
 
-                    if (backend != (uintptr_t) nullptr)
+                    for(uintptr_t backend: backends)
                         extra_params.backends.push_back((nixlBackendH*) backend);
 
                     if (notif_msg.size()>0) {
@@ -358,25 +358,29 @@ PYBIND11_MODULE(_bindings, m) {
                 }, py::arg("operation"), py::arg("local_descs"),
                    py::arg("remote_descs"), py::arg("remote_agent"),
                    py::arg("notif_msg") = std::string(""),
-                   py::arg("backend") = ((uintptr_t) nullptr))
+                   py::arg("backend") = std::vector<uintptr_t>({}))
         .def("queryXferBackend", [](nixlAgent &agent, uintptr_t reqh) -> uintptr_t {
                     nixlBackendH* handle = nullptr;
                     throw_nixl_exception(agent.queryXferBackend((nixlXferReqH*) reqh, handle));
                     return (uintptr_t) handle;
             })
         .def("prepXferDlist", [](nixlAgent &agent,
-                                const std::string &remote_agent,
-                                const nixl_xfer_dlist_t &descs,
-                                uintptr_t backend) -> uintptr_t {
+                                 std::string &remote_agent,
+                                 const nixl_xfer_dlist_t &descs,
+                                 std::vector<uintptr_t> backends) -> uintptr_t {
                     nixlDlistH* handle = nullptr;
                     nixl_opt_args_t extra_params;
-                    if(backend != (uintptr_t) nullptr)
+
+                    for(uintptr_t backend: backends)
                         extra_params.backends.push_back((nixlBackendH*) backend);
+
+                    if(remote_agent == "NIXL_LOCAL")
+                        remote_agent = "";
 
                     throw_nixl_exception(agent.prepXferDlist(remote_agent, descs, handle, &extra_params));
 
                     return (uintptr_t) handle;
-                }, py::arg("remote_agent"), py::arg("descs"), py::arg("backend") = (uintptr_t) nullptr)
+                }, py::arg("remote_agent"), py::arg("descs"), py::arg("backend") = std::vector<uintptr_t>({}))
         .def("makeXferReq", [](nixlAgent &agent,
                                const nixl_xfer_op_t &operation,
                                uintptr_t local_side,
