@@ -20,6 +20,9 @@ import torch
 
 import nixl._bindings as nixlBind
 
+nixlBackendH = int
+nixlSideH = int
+nixlXferH = int
 
 class nixl_agent_config:
     def __init__(self, enable_prog_thread=True, backends=["UCX"]):
@@ -49,7 +52,7 @@ class nixl_agent:
 
         self.name = agent_name
         self.notifs: dict[str, list[str]] = {}
-        self.backends: dict[str, int] = {}
+        self.backends: dict[str, nixlBackendH] = {}
         self.backend_mems: dict[str, list[str]] = {}
         self.backend_options: dict[str, dict[str, str]] = {}
 
@@ -188,7 +191,7 @@ class nixl_agent:
     def make_connection(self, remote_agent: str):
         self.agent.makeConnection(remote_agent)
 
-    # "NIXL_LOCAL" remote agent means local. example xfer can be used to know the backend
+    # nixlBind.NIXL_INIT_AGENT name means local. example xfer can be used to know the backend
     # xfer_list can be any of the types supported by get_xfer_descs
     def prep_xfer_dlist(
         self,
@@ -197,7 +200,7 @@ class nixl_agent:
         mem_type: Optional[str] = None,
         is_sorted: bool = False,
         backends: list[str] = [],
-    ) -> int:
+    ) -> nixlSideH:
         descs = self.get_xfer_descs(xfer_list, mem_type, is_sorted)
 
         handle_list = []
@@ -212,13 +215,13 @@ class nixl_agent:
     def make_prepped_xfer(
         self,
         operation: str,
-        local_xfer_side: int,
+        local_xfer_side: nixlSideH,
         local_indices: list[int],
-        remote_xfer_side: int,
+        remote_xfer_side: nixlSideH,
         remote_indices: list[int],
         notif_msg: str = "",
         skip_desc_merge: bool = False,
-    ) -> int:
+    ) -> nixlXferH:
         op = self.nixl_ops[operation]
         if op:
             handle = self.agent.makeXferReq(
@@ -244,7 +247,7 @@ class nixl_agent:
         remote_agent: str,
         notif_msg: str = "",
         backends: list[str] = [],
-    ) -> int:
+    ) -> nixlXferH:
         op = self.nixl_ops[operation]
         if op:
             handle_list = []
@@ -261,7 +264,7 @@ class nixl_agent:
             return 0
 
     # handle is an opaque NIXL handle
-    def transfer(self, handle: int, notif_msg: str = "") -> str:
+    def transfer(self, handle: nixlXferH, notif_msg: str = "") -> str:
         status = self.agent.postXferReq(handle, notif_msg)
         if status == nixlBind.NIXL_SUCCESS:
             return "DONE"
@@ -271,7 +274,7 @@ class nixl_agent:
             return "ERR"
 
     # handle is an opaque NIXL handle
-    def check_xfer_state(self, handle: int) -> str:
+    def check_xfer_state(self, handle: nixlXferH) -> str:
         status = self.agent.getXferStatus(handle)
         if status == nixlBind.NIXL_SUCCESS:
             return "DONE"
@@ -280,7 +283,7 @@ class nixl_agent:
         else:
             return "ERR"
 
-    def query_xfer_backend(self, handle: int) -> str:
+    def query_xfer_backend(self, handle: nixlXferH) -> str:
         b_handle = self.agent.queryXferBackend(handle)
         # this works because there should not be multiple matching handles in the Dict
         return next(
@@ -289,11 +292,11 @@ class nixl_agent:
             if backendH == b_handle
         )
 
-    def release_xfer_handle(self, handle: int):
+    def release_xfer_handle(self, handle: nixlXferH):
         # frees the handle too
         self.agent.releaseXferReq(handle)
 
-    def release_dlist_handle(self, handle: int):
+    def release_dlist_handle(self, handle: nixlXferH):
         # frees the handle too
         self.agent.releasedDlistH(handle)
 

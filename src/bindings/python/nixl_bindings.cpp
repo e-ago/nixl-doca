@@ -116,6 +116,8 @@ PYBIND11_MODULE(_bindings, m) {
     //TODO: each nixl class and/or function can be documented in place
     m.doc() = "pybind11 NIXL plugin: Implements NIXL descriptors and lists, as well as bindings of NIXL CPP APIs";
 
+    m.attr("NIXL_INIT_AGENT") = NIXL_INIT_AGENT;
+
     //cast types
     py::enum_<nixl_mem_t>(m, "nixl_mem_t")
         .value("DRAM_SEG", DRAM_SEG)
@@ -373,9 +375,6 @@ PYBIND11_MODULE(_bindings, m) {
 
                     for(uintptr_t backend: backends)
                         extra_params.backends.push_back((nixlBackendH*) backend);
-
-                    if(remote_agent == "NIXL_LOCAL")
-                        remote_agent = "";
 
                     throw_nixl_exception(agent.prepXferDlist(remote_agent, descs, handle, &extra_params));
 
