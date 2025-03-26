@@ -205,7 +205,7 @@ class nixl_agent:
     ) -> nixl_prepped_dlist_handle:
         descs = self.get_xfer_descs(xfer_list, mem_type, is_sorted)
 
-        if remote_agent is "NIXL_INIT_AGENT" or remote_agent is "":
+        if remote_agent == "NIXL_INIT_AGENT" or remote_agent == "":
             remote_agent = nixlBind.NIXL_INIT_AGENT
 
         handle_list = []
