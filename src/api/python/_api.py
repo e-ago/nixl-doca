@@ -24,6 +24,7 @@ nixlBackendH = int
 nixlSideH = int
 nixlXferH = int
 
+
 class nixl_agent_config:
     def __init__(self, enable_prog_thread=True, backends=["UCX"]):
         # TODO: add backend init parameters
@@ -463,7 +464,7 @@ class nixl_agent:
 
         return new_descs
 
-    # descs can be any List or NIXL DList type
+    # nixl Descriptor Lists natively support pickling
     def get_serialized_descs(self, descs) -> bytes:
         return pickle.dumps(descs)
 
