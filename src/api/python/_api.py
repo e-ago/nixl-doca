@@ -263,7 +263,6 @@ class nixl_agent:
             raise nixlBind.nixlInvalidParamError("Invalid op code")
             return nixlBind.nixlInvalidParamError
 
-    # handle is an opaque NIXL handle
     def transfer(self, handle: nixl_xfer_handle, notif_msg: str = "") -> str:
         status = self.agent.postXferReq(handle, notif_msg)
         if status == nixlBind.NIXL_SUCCESS:
@@ -273,7 +272,6 @@ class nixl_agent:
         else:
             return "ERR"
 
-    # handle is an opaque NIXL handle
     def check_xfer_state(self, handle: nixl_xfer_handle) -> str:
         status = self.agent.getXferStatus(handle)
         if status == nixlBind.NIXL_SUCCESS:
