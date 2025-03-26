@@ -237,7 +237,7 @@ class nixl_agent:
             return handle
         else:
             raise nixlBind.nixlInvalidParamError("Invalid op code")
-            return 0
+            return nixlBind.nixlInvalidParamError
 
     def initialize_xfer(
         self,
@@ -261,7 +261,7 @@ class nixl_agent:
             return handle
         else:
             raise nixlBind.nixlInvalidParamError("Invalid op code")
-            return 0
+            return nixlBind.nixlInvalidParamError
 
     # handle is an opaque NIXL handle
     def transfer(self, handle: nixl_xfer_handle, notif_msg: str = "") -> str:
