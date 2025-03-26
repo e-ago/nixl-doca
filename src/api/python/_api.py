@@ -177,23 +177,18 @@ class nixl_agent:
     # registration) or direct output of register_memory is passed here
     def deregister_memory(
         self, dereg_list: nixlBind.nixlRegDList, backends: list[str] = []
-    ) -> str:
+    ):
         # based on backend type and mem_type, figure what deregistrations are needed
         handle_list = []
         for backend_string in backends:
             handle_list.append(self.backends[backend_string])
-        ret = self.agent.deregisterMem(dereg_list, handle_list)
-
-        if ret != 0:
-            return "ERR"
-
-        return "DONE"
+        self.agent.deregisterMem(dereg_list, handle_list)
 
     # Optional proactive make connection
     def make_connection(self, remote_agent: str):
         self.agent.makeConnection(remote_agent)
 
-    # "NIXL_INIT_AGENT" name means local, will be made our own NIXL_INIT_AGENT here
+    # remote_agent should be "NIXL_INIT_AGENT" for local descriptors on the initiator side
     # xfer_list can be any of the types supported by get_xfer_descs
     def prep_xfer_dlist(
         self,
