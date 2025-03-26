@@ -19,7 +19,6 @@ import torch
 
 import nixl._utils as nixl_utils
 from nixl._api import nixl_agent
-from nixl._bindings import NIXL_INIT_AGENT
 
 if __name__ == "__main__":
     buf_size = 256
@@ -109,7 +108,7 @@ if __name__ == "__main__":
 
     # prep transfer mode
     local_prep_handle = nixl_agent2.prep_xfer_dlist(
-        NIXL_INIT_AGENT, [(addr3, buf_size, 0), (addr4, buf_size, 0)], "DRAM", True
+        "NIXL_INIT_AGENT", [(addr3, buf_size, 0), (addr4, buf_size, 0)], "DRAM", True
     )
     remote_prep_handle = nixl_agent2.prep_xfer_dlist(
         remote_name, agent1_xfer_descs, "DRAM"
