@@ -305,6 +305,7 @@ nixlAgent::deregisterMem(const nixl_reg_dlist_t &descs,
 
 
     backend_set_t*    backend_set;
+    size_t            n_backends = 0;
     nixl_status_t     ret, bad_ret=NIXL_SUCCESS;
     nixl_xfer_dlist_t trimmed = descs.trim();
 
@@ -333,6 +334,8 @@ nixlAgent::deregisterMem(const nixl_reg_dlist_t &descs,
         ret = data->memorySection->remDescList(resp, backend);
         if (ret != NIXL_SUCCESS)
             bad_ret = ret;
+
+        if(n_backends++ == backend_set->size()) break;
     }
 
     if (extra_params && extra_params->backends.size() > 0)
