@@ -13,13 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if cuda_dep.found()
-    cuda_dependencies = [cuda_dep]
-else
-    cuda_dependencies = []
-endif
-
-nixl_doca_test = executable('nixl_doca_test', 'nixl_doca_test.cpp',
+message('building doca test')
+nixl_doca_test = executable('nixl_doca_test', 'nixl_doca_test.cpp', 'simple_kernel.cu',
                           dependencies: [nixl_dep, nixl_infra, cuda_dep],
                           include_directories: [nixl_inc_dirs, utils_inc_dirs],
                           install: true)

@@ -20,21 +20,46 @@
 
 #include "doca_backend.h"
 
-__global__ void kernel_write()
+__global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu_buf_arr *lbarr, struct doca_gpu_buf_arr *rbarr, size_t size)
 {
-    printf("Hey! I'm the rdma write kernel\n");
+    doca_error_t result;
+	struct doca_gpu_buf *lbuf;
+	struct doca_gpu_buf *rbuf;
+    const int connection_index = 0;
+    uint32_t num_ops=0;
+
+    printf(">>>>>>> CUDA kernel: Hey! I'm the rdma write kernel\n");
+
+    doca_gpu_dev_buf_get_buf(lbarr, 0, &lbuf);
+	doca_gpu_dev_buf_get_buf(rbarr, 0, &rbuf);
+
+    //Each thread should send a different buffer
+    result = doca_gpu_dev_rdma_write_strong(rdma_gpu, connection_index, rbuf, 0, lbuf, 0, size, 0, DOCA_GPU_RDMA_WRITE_FLAG_NONE);
+    if (result != DOCA_SUCCESS)
+        printf("Error %d doca_gpu_dev_rdma_write_strong\n", result);
+
+    result = doca_gpu_dev_rdma_commit_strong(rdma_gpu, connection_index);
+    if (result != DOCA_SUCCESS)
+        printf("Error %d doca_gpu_dev_rdma_push\n", result);
+
+    // result = doca_gpu_dev_rdma_wait_all(rdma_gpu, &num_ops);
+    // if (result != DOCA_SUCCESS)
+    //     printf("Error %d doca_gpu_dev_rdma_push\n", result);
+
+    printf("Rdma write kernel completed %d ops\n", num_ops);
+
 }
 
 extern "C" {
 
-doca_error_t doca_kernel_write(cudaStream_t stream)
+doca_error_t doca_kernel_write(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu_buf_arr *lbarr, struct doca_gpu_buf_arr *rbarr, size_t size)
 {
     cudaError_t result = cudaSuccess;
 
-    // if (rdma_gpu == NULL || server_local_buf_arr_A == NULL || server_remote_buf_arr_F == NULL) {
-    //     DOCA_LOG_ERR("kernel_write_server invalid input values");
-    //     return DOCA_ERROR_INVALID_VALUE;
-    // }
+    if (rdma_gpu == NULL || lbarr == NULL || rbarr == NULL || size == 0) {
+        fprintf(stderr, "kernel_write_server invalid input values");
+        return DOCA_ERROR_INVALID_VALUE;
+    }
 
     /* Check no previous CUDA errors */
     result = cudaGetLastError();
@@ -43,7 +68,7 @@ doca_error_t doca_kernel_write(cudaStream_t stream)
         return DOCA_ERROR_BAD_STATE;
     }
 
-    kernel_write<<<1, 1, 0, stream>>>();
+    kernel_write<<<1, 1, 0, stream>>>(rdma_gpu, lbarr, rbarr, size);
     result = cudaGetLastError();
     if (result != cudaSuccess) {
         fprintf(stderr, "[%s:%d] cuda failed with %s", __FILE__, __LINE__, cudaGetErrorString(result));

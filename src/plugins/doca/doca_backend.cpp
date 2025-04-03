@@ -205,6 +205,17 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 	if (result != DOCA_SUCCESS) {
 		DOCA_LOG_ERR("Failed to start RDMA context: %s", doca_error_get_descr(result));
 	}
+
+	result = doca_rdma_get_gpu_handle(rdma, &(rdma_gpu));
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to get RDMA GPU handler: %s", doca_error_get_descr(result));
+	}
+
+	result = doca_rdma_export(rdma, &(connection_details), &(conn_det_len), &connection);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Failed to export RDMA with connection details");
+	}
+
 }
 
 nixl_mem_list_t nixlDocaEngine::getSupportedMems () const {
@@ -284,11 +295,11 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 										  const nixl_mem_t &nixl_mem,
 										  nixlBackendMD* &out)
 {
-    nixlDocaPrivateMetadata *priv = new nixlDocaPrivateMetadata;
-    // uint64_t rkey_addr;
-    // size_t rkey_size;
+	nixlDocaPrivateMetadata *priv = new nixlDocaPrivateMetadata;
+	// uint64_t rkey_addr;
+	// size_t rkey_size;
 	uint32_t permissions = DOCA_ACCESS_FLAG_LOCAL_READ_WRITE | DOCA_ACCESS_FLAG_RDMA_WRITE | DOCA_ACCESS_FLAG_PCI_RELAXED_ORDERING;
-	doca_error_t result, result2;
+	doca_error_t result;
 
 	result = doca_mmap_create(&(priv->mem.mmap));
 	if (result != DOCA_SUCCESS)
@@ -321,26 +332,39 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 
 	priv->mem.addr = (void*)mem.addr;
 	priv->mem.len = mem.len;
+	priv->remoteMmapStr = nixlSerDes::_bytesToString((void*) priv->mem.export_mmap, priv->mem.export_len);
+
+	/* Local buffer array */
+	result = doca_buf_arr_create(1, &(priv->mem.barr));
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_set_params(priv->mem.barr, priv->mem.mmap, mem.len, 0);
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_set_target_gpu(priv->mem.barr, gdev);
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_start(priv->mem.barr);
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_get_gpu_handle(priv->mem.barr, &(priv->mem.barr_gpu));
+	if (result != DOCA_SUCCESS)
+		goto error;
 
 	out = (nixlBackendMD*) priv; //typecast?
-
-	// TODO: Add nixl_mem check?
-    // ret = uw->memReg((void*) mem.addr, mem.len, priv->mem);
-    // if (ret) {
-    //     return NIXL_ERR_BACKEND;
-    // }
-    // ret = uw->packRkey(priv->mem, rkey_addr, rkey_size);
-    // if (ret) {
-    //     return NIXL_ERR_BACKEND;
-    // }
-    // priv->rkeyStr = nixlSerDes::_bytesToString((void*) rkey_addr, rkey_size);
 
 	return NIXL_SUCCESS;
 
 error:
-	result2 = doca_mmap_destroy(priv->mem.mmap);
-	if (result2 != DOCA_SUCCESS)
-		DOCA_LOG_ERR("Failed to call doca_mmap_destroy: %s", doca_error_get_descr(result2));
+	if (priv->mem.barr)
+		doca_buf_arr_destroy(priv->mem.barr);
+
+	if (priv->mem.mmap)
+		doca_mmap_destroy(priv->mem.mmap);
 
 	return NIXL_ERR_BACKEND;
 }
@@ -348,14 +372,14 @@ error:
 nixl_status_t nixlDocaEngine::deregisterMem(nixlBackendMD* meta)
 {
 	doca_error_t result;
-    nixlDocaPrivateMetadata *priv = (nixlDocaPrivateMetadata*) meta;
+	nixlDocaPrivateMetadata *priv = (nixlDocaPrivateMetadata*) meta;
 
 	result = doca_mmap_destroy(priv->mem.mmap);
 	if (result != DOCA_SUCCESS)
 		DOCA_LOG_ERR("Failed to call doca_mmap_destroy: %s", doca_error_get_descr(result));
 
 	delete priv;
-    return NIXL_SUCCESS;
+	return NIXL_SUCCESS;
 }
 
 nixl_status_t nixlDocaEngine::getPublicData (const nixlBackendMD* meta,
@@ -364,11 +388,82 @@ nixl_status_t nixlDocaEngine::getPublicData (const nixlBackendMD* meta,
 }
 
 nixl_status_t
+nixlDocaEngine::internalMDHelper(const nixl_blob_t &blob,
+								 const std::string &agent,
+								 nixlBackendMD* &output)
+{
+	doca_error_t result;
+	nixlDocaConnection conn;
+	nixlDocaPublicMetadata *md = new nixlDocaPublicMetadata;
+	size_t size = blob.size();
+
+	// auto search = remoteConnMap.find(agent);
+
+	// if(search == remoteConnMap.end()) {
+	// 	//TODO: err: remote connection not found
+	// 	DOCA_LOG_ERR("err: remote connection not found");
+	// 	return NIXL_ERR_NOT_FOUND;
+	// }
+	// conn = (nixlDocaConnection) search->second;
+
+	// //directly copy underlying conn struct
+	// md->conn = conn;
+
+	char *addr = new char[size];
+	nixlSerDes::_stringToBytes(addr, blob, size);
+
+	result = doca_mmap_create_from_export(NULL,
+		addr,
+		size,
+		ddev,
+		&md->mem.mmap);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Function doca_mmap_create_from_export failed: %s", doca_error_get_descr(result));
+		return NIXL_ERR_BACKEND;
+	}
+
+	/* Remote buffer array */
+	result = doca_buf_arr_create(1, &(md->mem.barr));
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_set_params(md->mem.barr, md->mem.mmap, size, 0);
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_set_target_gpu(md->mem.barr, gdev);
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_start(md->mem.barr);
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	result = doca_buf_arr_get_gpu_handle(md->mem.barr, &(md->mem.barr_gpu));
+	if (result != DOCA_SUCCESS)
+		goto error;
+
+	output = (nixlBackendMD*) md;
+
+	printf("Remote MMAP created %p\n", (void*)md->mem.mmap);
+
+	delete[] addr;
+
+	return NIXL_SUCCESS;
+
+error:
+	if (md->mem.barr)
+		doca_buf_arr_destroy(md->mem.barr);
+
+	return NIXL_ERR_BACKEND;
+}
+
+nixl_status_t
 nixlDocaEngine::loadLocalMD (nixlBackendMD* input,
 							nixlBackendMD* &output)
 {
-	// nixlDocaPrivateMetadata* input_md = (nixlDocaPrivateMetadata*) input;
-    // return internalMDHelper(input_md->rkeyStr, localAgent, output);
+	nixlDocaPrivateMetadata* input_md = (nixlDocaPrivateMetadata*) input;
+	return internalMDHelper(input_md->remoteMmapStr, localAgent, output);
 
 	return NIXL_SUCCESS;
 }
@@ -379,6 +474,7 @@ nixl_status_t nixlDocaEngine::loadRemoteMD (const nixlBlobDesc &input,
 										   const std::string &remote_agent,
 										   nixlBackendMD* &output)
 {
+	return internalMDHelper(input.metaInfo, remote_agent, output);
 	return NIXL_SUCCESS;
 }
 
@@ -421,7 +517,7 @@ nixl_status_t nixlDocaEngine::prepXfer (const nixl_xfer_op_t &operation,
 	nixlDocaBckndReq *treq = new nixlDocaBckndReq;
 	treq->stream = (cudaStream_t)opt_args->customParam;
 	//Check cuda
-	cudaEventCreate(&treq->event);
+	cudaEventCreateWithFlags(&treq->event, cudaEventBlockingSync);
 
 	handle = treq;
 
@@ -436,57 +532,64 @@ nixl_status_t nixlDocaEngine::postXfer (const nixl_xfer_op_t &operation,
 									   const nixl_opt_b_args_t* opt_args)
 {
 	nixlDocaBckndReq *treq = (nixlDocaBckndReq *) handle;
-	// nixlDocaPrivateMetadata *lmd;
-    // nixlDocaPublicMetadata *rmd;
-    size_t lcnt = local.descCount();
-    size_t rcnt = remote.descCount();
-	cudaError_t ev_status;
+	nixlDocaPrivateMetadata *lmd;
+	nixlDocaPublicMetadata *rmd;
+	size_t lcnt = local.descCount();
+	size_t rcnt = remote.descCount();
 
-    if (lcnt != rcnt) {
-        return NIXL_ERR_INVALID_PARAM;
-    }
+	if (lcnt != rcnt) {
+		return NIXL_ERR_INVALID_PARAM;
+	}
 
-    for(size_t i = 0; i < lcnt; i++) {
-        void *laddr = (void*) local[i].addr;
-        size_t lsize = local[i].len;
-        void *raddr = (void*) remote[i].addr;
-        size_t rsize = remote[i].len;
+	// Parallelize with 1 CUDA kernel when lcnt > 1
+	for (size_t i = 0; i < lcnt; i++) {
+		void *laddr = (void*) local[i].addr;
+		size_t lsize = local[i].len;
+		void *raddr = (void*) remote[i].addr;
+		size_t rsize = remote[i].len;
 
-        // lmd = (nixlDocaPrivateMetadata*) local[i].metadataP;
-        // rmd = (nixlDocaPublicMetadata*) remote[i].metadataP;
+		lmd = (nixlDocaPrivateMetadata*) local[i].metadataP;
+		rmd = (nixlDocaPublicMetadata*) remote[i].metadataP;
 
-        if (lsize != rsize) {
-            return NIXL_ERR_INVALID_PARAM;
-        }
+		if (lsize != rsize) {
+			return NIXL_ERR_INVALID_PARAM;
+		}
 	
-        switch (operation) {
-        case NIXL_READ:
-			std::cout << "READ KERNEL, local " << laddr << " remote " << raddr << " size " << lsize << "\n";
-			//cuda_stream_rdma_write
-			cudaEventRecord(treq->event, treq->stream);
-            break;
-        case NIXL_WRITE:
-			std::cout << "WRITE KERNEL, local " << laddr << " remote " << raddr << " size " << lsize << "\n";
-			doca_kernel_write(treq->stream);
-            //cuda_stream_rdma_read
-			cudaEventRecord(treq->event, treq->stream);
-            break;
-        default:
-            return NIXL_ERR_INVALID_PARAM;
-        }
+		printf("transfer %zd laddr %p lsize %zd raddr %p rsize %zd localmmap %p remotemmap %p\n",
+			i, laddr, lsize, raddr, rsize, lmd->mem.mmap, rmd->mem.mmap);
 
-        // if (retHelper(ret, head, req)) {
-        //     return ret;
-        // }
-    }
+		switch (operation) {
+		case NIXL_READ:
+			std::cout << "READ KERNEL, local " << laddr << " remote " << raddr << " size " << lsize << "\n";
+			cudaEventRecord(treq->event, treq->stream);
+			treq->launched = true;
+			break;
+		case NIXL_WRITE:
+			std::cout << "WRITE KERNEL, local " << laddr << " remote " << raddr << " size " << lsize << "\n";
+			doca_kernel_write(treq->stream, rdma_gpu, lmd->mem.barr_gpu, rmd->mem.barr_gpu, lsize);
+			cudaEventRecord(treq->event, treq->stream);
+			treq->launched = true;
+			break;
+		default:
+			return NIXL_ERR_INVALID_PARAM;
+		}
+
+		// if (retHelper(ret, head, req)) {
+		//     return ret;
+		// }
+	}
 
 	return NIXL_SUCCESS;
+
 }
 
 nixl_status_t nixlDocaEngine::checkXfer(nixlBackendReqH* handle)
 {
 	cudaError_t ev_status;
 	nixlDocaBckndReq *treq = (nixlDocaBckndReq *) handle;
+
+	if (treq->launched == false)
+		return NIXL_IN_PROG;
 
 	ev_status = cudaEventQuery(treq->event);
 	if (ev_status == cudaSuccess)

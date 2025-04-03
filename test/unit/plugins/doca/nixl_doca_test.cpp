@@ -14,25 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <iostream>
-#include <string>
-#include <algorithm>
-#include <nixl_descriptors.h>
-#include <nixl_params.h>
-#include <nixl.h>
-#include <cassert>
-#include <cuda.h>
-#include <cuda_runtime.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <ctime>
-#include <iomanip>
-#include <sstream>
-#include <cerrno>
-#include <cstring>
 
-#define NUM_TRANSFERS 1
-#define SIZE 1024
+#include "common.h"
 
 static void checkCudaError(cudaError_t result, const char *message) {
     if (result != cudaSuccess) {
@@ -132,9 +115,12 @@ int main(int argc, char *argv[])
         std::cerr << "Error creating transfer request\n";
         exit(-1);
     }
-    std::cout << " Post the request with DOCA backend\n ";
+
+    std::cout << "Launch simple kernel on stream\n";
+    launch_simple_kernel(stream, buf_local[0].addr, buf_local[0].len);
+    std::cout << "Post the request with DOCA backend\n ";
     status = agent.postXferReq(treq);
-    std::cout << " Waiting for completion\n";
+    std::cout << "Waiting for completion\n";
 
     while (status != NIXL_SUCCESS) {
         status = agent.getXferStatus(treq);

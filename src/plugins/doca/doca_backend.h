@@ -33,6 +33,7 @@
 #include <doca_gpunetio.h>
 #include <doca_rdma.h>
 #include <doca_mmap.h>
+#include <doca_buf_array.h>
 
 #include "nixl.h"
 #include "backend/backend_engine.h"
@@ -60,6 +61,8 @@ struct nixlDocaMem {
     struct doca_mmap *mmap;
     void *export_mmap;
     size_t export_len;
+    struct doca_buf_arr *barr;
+    struct doca_gpu_buf_arr *barr_gpu;
 };
     
 class nixlDocaConnection : public nixlBackendConnMD {
@@ -79,8 +82,7 @@ class nixlDocaConnection : public nixlBackendConnMD {
 class nixlDocaPrivateMetadata : public nixlBackendMD {
     private:
         nixlDocaMem mem;
-        uint32_t rkey;
-        nixl_blob_t rkeyStr;
+        nixl_blob_t remoteMmapStr;
 
     public:
         nixlDocaPrivateMetadata() : nixlBackendMD(true) {
@@ -90,7 +92,7 @@ class nixlDocaPrivateMetadata : public nixlBackendMD {
         }
 
         std::string get() const {
-            return rkeyStr;
+            return remoteMmapStr;
         }
 
     friend class nixlDocaEngine;
@@ -100,7 +102,7 @@ class nixlDocaPrivateMetadata : public nixlBackendMD {
 class nixlDocaPublicMetadata : public nixlBackendMD {
 
     public:
-        uint32_t rkey;
+        nixlDocaMem mem;
         nixlDocaConnection conn;
 
         nixlDocaPublicMetadata() : nixlBackendMD(false) {}
@@ -116,10 +118,11 @@ class nixlDocaEngine : public nixlBackendEngine {
 	    struct doca_dev *ddev;	  /* DOCA device handler associated to queues */
         struct doca_log_backend *sdk_log;
         struct doca_rdma *rdma;		    /* DOCA RDMA instance */
-        struct doca_gpu_dev_rdma *gpu_rdma; /* DOCA RDMA instance GPU handler */
+        struct doca_gpu_dev_rdma *rdma_gpu; /* DOCA RDMA instance GPU handler */
         struct doca_ctx *rdma_ctx;	    /* DOCA context to be used with DOCA RDMA */
         const void *connection_details;	    /* Remote peer connection details */
         size_t conn_det_len;		    /* Remote peer connection details data length */    
+        struct doca_rdma_connection *connection;
 
         /* Progress thread data */
         volatile bool pthrStop, pthrActive, pthrOn;
@@ -142,15 +145,18 @@ class nixlDocaEngine : public nixlBackendEngine {
             public:
                 cudaStream_t stream;
                 cudaEvent_t event;
+                bool launched;
                 std::string *amBuffer;
 
                 nixlDocaBckndReq() : nixlLinkElem(), nixlBackendReqH() {
                     _completed = 0;
+                    launched = false;
                     amBuffer = NULL;
                 }
 
                 ~nixlDocaBckndReq() {
                     _completed = 0;
+                    launched = false;
                     if (amBuffer) {
                         delete amBuffer;
                     }
@@ -256,10 +262,13 @@ extern "C" {
  * Launch a CUDA kernel doing RDMA Write client
  *
  * @stream [in]: CUDA Stream to launch the kernel
+ * @rdma_gpu [in]: DOCA RDMA GPU object
+ * @lbarr [in]: Local buffer array
+ * @rbarr [in]: Remote buffer array
+ * @size [in]: Bytes to send
  * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
  */
-doca_error_t doca_kernel_write(cudaStream_t stream);
-
+doca_error_t doca_kernel_write(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu_buf_arr *lbarr, struct doca_gpu_buf_arr *rbarr, size_t size);
 #if __cplusplus
 }
 #endif
