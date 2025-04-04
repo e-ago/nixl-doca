@@ -147,7 +147,7 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 		DOCA_LOG_ERR("Failed to create DOCA GPU device: %s", doca_error_get_descr(result));
 	}
 
-	std::cout << "GPU " << gdev << "and NIC " << ddev << " created" << std::endl;
+	// std::cout << "GPU " << gdev << "and NIC " << ddev << " created" << std::endl;
 
 	/* Create DOCA RDMA instance */
 	result = doca_rdma_create(ddev, &(rdma));

@@ -42,6 +42,11 @@ nixl_ucx_app  = executable('nixl_test', 'nixl_test.cpp',
                            include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes'],
                            link_with: [serdes_lib], install: true)
 
+nixl_doca_app  = executable('nixl_doca_cuda_test', 'nixl_doca_cuda_test.cu',
+                           dependencies: [nixl_dep, nixl_infra, stream_interface] + cuda_dep,
+                           include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes'],
+                           link_with: [serdes_lib], install: true)
+
 plugin_test = executable('test_plugin',
                         'test_plugin.cpp',
                         dependencies: [nixl_dep, cuda_dep],
