@@ -32,6 +32,7 @@
 #include <doca_log.h>
 #include <doca_gpunetio.h>
 #include <doca_rdma.h>
+#include <doca_rdma_bridge.h>
 #include <doca_mmap.h>
 #include <doca_buf_array.h>
 

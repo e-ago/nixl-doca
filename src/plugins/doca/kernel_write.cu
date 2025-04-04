@@ -35,7 +35,7 @@ __global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu
     doca_gpu_dev_buf_get_addr(lbuf, &laddr);
     doca_gpu_dev_buf_get_addr(rbuf, &raddr);
 
-    printf(">>>>>>> CUDA kernel: Hey! I'm the rdma write kernel laddr %lx raddr %lx size %d\n", laddr, raddr, (int)size);
+    printf(">>>>>>> CUDA rdma write kernel laddr %lx raddr %lx size %d\n", laddr, raddr, (int)size);
 
     //Each thread should send a different buffer
     result = doca_gpu_dev_rdma_write_strong(rdma_gpu, connection_index, rbuf, 0, lbuf, 0, size, 0, DOCA_GPU_RDMA_WRITE_FLAG_NONE);
@@ -51,7 +51,6 @@ __global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu
         printf("Error %d doca_gpu_dev_rdma_wait_all\n", result);
 
     printf("Rdma write kernel completed %d ops\n", num_ops);
-
 }
 
 extern "C" {

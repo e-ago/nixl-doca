@@ -25,38 +25,15 @@ static void checkCudaError(cudaError_t result, const char *message) {
 	}
 }
 
-std::vector<std::string> split(const std::string& str, const char *delimiter) {
-	std::vector<std::string> tokens;
-	std::string token;
-	size_t start = 0, end = 0;
-
-	while ((end = str.find(delimiter, start)) != std::string::npos) {
-		end += delimiter_stride;
-		token = str.substr(start, end - start);
-		tokens.push_back(token);
-		start = end + 1;
-	}
-	// Add the last token
-	token = str.substr(start);
-	tokens.push_back(token);
-	return tokens;
-}
-
 int main(int argc, char *argv[])
 {
-	// nixl_status_t           ret = NIXL_SUCCESS;
-	
 	std::string             role;
-	// int                     status = 0;
-	// int                     i;
-	// int                     fd[NUM_TRANSFERS];
 	void                    *addr_initiator[NUM_TRANSFERS];
 	void                    *addr_target[NUM_TRANSFERS];
 	nixlAgentConfig         cfg(true);
 	nixl_b_params_t         params;
 	nixlBlobDesc            buf_initiator[NUM_TRANSFERS];
 	nixlBlobDesc            buf_target[NUM_TRANSFERS];
-	// nixlBlobDesc            ftrans[NUM_TRANSFERS];
 	nixlBackendH            *doca_initiator;
 	nixlBackendH            *doca_target;
 	nixlBlobDesc			desc;
@@ -66,21 +43,30 @@ int main(int argc, char *argv[])
 	nixl_opt_args_t extra_params_target;
 	nixl_reg_dlist_t dram_for_doca_initiator(DRAM_SEG);
 	nixl_reg_dlist_t dram_for_doca_target(DRAM_SEG);
-	cudaStream_t stream;
+	cudaStream_t stream_initiator, stream_target;
 	nixl_status_t status;
 	std::string name;
 	nixl_blob_t metadata_target;
+	nixl_blob_t metadata_target_connect;
 	nixl_blob_t metadata_initiator;
+	nixl_blob_t metadata_initiator_connect;
 	nixlSerDes *serdes_target    = new nixlSerDes();
+	nixlSerDes *serdes_target_connect    = new nixlSerDes();
 	nixlSerDes *serdes_initiator = new nixlSerDes();
-	nixl_blob_t             remote_desc;
+	nixlSerDes *serdes_initiator_connect = new nixlSerDes();
+	int leastPriority, greatestPriority;
 
 	params["network_devices"] = "mlx5_0";
 	params["gpu_devices"] = "8A:00.0";
 
 	checkCudaError(cudaSetDevice(0), "Failed to set device");
 	cudaFree(0);
-	checkCudaError(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking), "Failed to create CUDA stream");
+	checkCudaError(cudaDeviceGetStreamPriorityRange(&leastPriority, &greatestPriority), "Failed to get GPU stream priorities");
+	checkCudaError(cudaStreamCreateWithPriority(&stream_initiator, cudaStreamNonBlocking, greatestPriority), "Failed to create CUDA stream");
+	checkCudaError(cudaStreamCreateWithPriority(&stream_target, cudaStreamNonBlocking, leastPriority), "Failed to create CUDA stream");
+
+	launch_warmup_kernel(stream_initiator, 0, 0);
+	launch_warmup_kernel(stream_target, 0, 0);
 
 	std::cout << "Starting Agent for DOCA Test\n";
 
@@ -136,35 +122,56 @@ int main(int argc, char *argv[])
 	/* ********************************* Single process handshake ********************************* */
 
 	agent_target.getLocalMD(metadata_target);
+	agent_initiator.getLocalMD(metadata_initiator);
+
+	//Init target for remote
 	assert(serdes_target->addStr("AgentMD", metadata_target) == NIXL_SUCCESS);
 	assert(dram_for_doca_target.trim().serialize(serdes_target) == NIXL_SUCCESS);
-	std::string str_desc = serdes_target->exportStr();
-	/* Here we should have send/recv */
-	serdes_initiator->importStr(str_desc);
-	metadata_initiator = serdes_initiator->getStr("AgentMD");
-	assert (metadata_initiator != "");
-	agent_initiator.loadRemoteMD(metadata_initiator, name);
+
+	//Init initiator for remote
+	assert(serdes_initiator->addStr("AgentMD", metadata_initiator) == NIXL_SUCCESS);
+	assert(dram_for_doca_initiator.trim().serialize(serdes_initiator) == NIXL_SUCCESS);
+
+	/* Fake target -> initiator socket send/recv */
+	std::cout << "Connect Initiator\n";
+	serdes_initiator_connect->importStr(serdes_target->exportStr());
+	metadata_initiator_connect = serdes_initiator_connect->getStr("AgentMD");
+	assert (metadata_initiator_connect != "");
+	agent_initiator.loadRemoteMD(metadata_initiator_connect, name);
+
+	/* Fake initiator -> target socket send/recv */
+	std::cout << "Connect Target\n";
+	serdes_target_connect->importStr(serdes_initiator->exportStr());
+	metadata_target_connect = serdes_target_connect->getStr("AgentMD");
+	assert (metadata_target_connect != "");
+	agent_target.loadRemoteMD(metadata_target_connect, name);
 
 	/* ********************************* Create initiator -> target Xfer req ********************************* */
 
 	nixl_xfer_dlist_t dram_initiator_doca = dram_for_doca_initiator.trim();
-	nixl_xfer_dlist_t dram_target_doca(serdes_initiator);
-	extra_params_initiator.customParam = (uintptr_t)stream;
+	nixl_xfer_dlist_t dram_target_doca(serdes_initiator_connect);
 
-	status = agent_initiator.createXferReq(NIXL_WRITE, dram_initiator_doca, dram_target_doca,
-		"doca_target", treq, &extra_params_initiator);
+	extra_params_initiator.customParam = (uintptr_t)stream_initiator;
+	status = agent_initiator.createXferReq(NIXL_WRITE, dram_initiator_doca, dram_target_doca, "doca_target", treq, &extra_params_initiator);
 	if (status != NIXL_SUCCESS) {
 		std::cerr << "Error creating transfer request\n";
 		exit(-1);
 	}
 
-	std::cout << "Launch simple kernel on stream\n";
-	launch_simple_kernel(stream, buf_initiator[0].addr, buf_initiator[0].len);
+	std::cout << "Launch initiator send kernel on stream\n";
+	launch_initiator_send_kernel(stream_initiator, buf_initiator[0].addr, buf_initiator[0].len);
 	std::cout << "Post the request with DOCA backend\n ";
 	status = agent_initiator.postXferReq(treq);
 	std::cout << "Waiting for completion\n";
+	/* Weird behaviour: even if stream non-blocking with lowest priority
+	 * still it prevents other cuda kernels to be launched in parallel
+	 * while it's still active.
+	 * Can't put it befeore initiator or postXfer.
+	 * Nosense CUDA driver issue...
+	 */
+	std::cout << "Launch target wait kernel on stream\n";
+	launch_target_wait_kernel(stream_target, buf_target[0].addr, buf_target[0].len);
 
-	while(1);
 	while (status != NIXL_SUCCESS) {
 		status = agent_initiator.getXferStatus(treq);
 		assert(status >= 0);
@@ -172,14 +179,15 @@ int main(int argc, char *argv[])
 	std::cout <<" Completed writing data using DOCA backend\n";
 	agent_initiator.releaseXferReq(treq);
 
+	std::cout << "Closing.. \n";
+	cudaStreamSynchronize(stream_initiator);
+	cudaStreamDestroy(stream_initiator);
+	cudaStreamSynchronize(stream_target);
+	cudaStreamDestroy(stream_target);
 
 	std::cout << "Memory cleanup.. \n";
 	agent_initiator.deregisterMem(dram_for_doca_initiator, &extra_params_initiator);
 	agent_target.deregisterMem(dram_for_doca_target, &extra_params_target);
-	
-	std::cout << "Closing.. \n";
-
-	cudaStreamDestroy(stream);
 
 	/** Argument Parsing */
 	// if (argc < 2) {

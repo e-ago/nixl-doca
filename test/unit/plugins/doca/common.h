@@ -44,15 +44,9 @@
 extern "C" {
 #endif
 
-/*
- * Launch a simple CUDA kernel for dummy data processing
- *
- * @stream [in]: CUDA Stream to launch the kernel
- * @addr [in]: DOCA RDMA GPU object
- * @size [in]: Local buffer array
- * @return: 0 on success and -1 otherwise
- */
-int launch_simple_kernel(cudaStream_t stream, uintptr_t addr, size_t size);
+int launch_warmup_kernel(cudaStream_t stream, uintptr_t addr, size_t size);
+int launch_target_wait_kernel(cudaStream_t stream, uintptr_t addr, size_t size);
+int launch_initiator_send_kernel(cudaStream_t stream, uintptr_t addr, size_t size);
 
 #if __cplusplus
 }

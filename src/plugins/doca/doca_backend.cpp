@@ -326,6 +326,8 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	// size_t rkey_size;
 	uint32_t permissions = DOCA_ACCESS_FLAG_LOCAL_READ_WRITE | DOCA_ACCESS_FLAG_RDMA_WRITE | DOCA_ACCESS_FLAG_PCI_RELAXED_ORDERING;
 	doca_error_t result;
+	struct ibv_pd *pd;
+	uint32_t mkey;
 
 	result = doca_mmap_create(&(priv->mem.mmap));
 	if (result != DOCA_SUCCESS)
@@ -381,7 +383,10 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	if (result != DOCA_SUCCESS)
 		goto error;
 
-	printf("LocalMMAP addr %p size %d\n", priv->mem.addr, (int)mem.len);
+	doca_rdma_bridge_get_dev_pd(ddev, &pd);
+	doca_rdma_bridge_get_mmap_mkey_from_pd(priv->mem.mmap, pd, &mkey);
+
+	printf("LocalMMAP addr %p size %d mkey %x\n", priv->mem.addr, (int)mem.len, mkey);
 	out = (nixlBackendMD*) priv; //typecast?
 
 	return NIXL_SUCCESS;

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 message('building doca test')
-nixl_doca_test = executable('nixl_doca_test', 'nixl_doca_test.cpp', 'simple_kernel.cu',
+nixl_doca_test = executable('nixl_doca_test', 'nixl_doca_test.cpp', 'kernel.cu',
                           dependencies: [nixl_dep, nixl_infra, cuda_dep],
                           include_directories: [nixl_inc_dirs, utils_inc_dirs],
                           link_with: [serdes_lib],
