@@ -154,6 +154,7 @@ int main(int argc, char *argv[]) {
     /** Serialization/Deserialization object to create a blob */
     nixlSerDes *serdes        = new nixlSerDes();
     nixlSerDes *remote_serdes = new nixlSerDes();
+    std::string target_name;
 
     /** Descriptors and Transfer Request */
     nixl_reg_dlist_t  dram_for_doca(DRAM_SEG);
@@ -162,7 +163,7 @@ int main(int argc, char *argv[]) {
     /** Argument Parsing */
     if (argc < 4) {
         std::cout <<"Enter the required arguments\n" << std::endl;
-        std::cout <<"<Role> " <<"Initiator IP> <Initiator Port>"
+        std::cout <<"<Role> " <<"Peer IP> <Peer Port>"
                   << std::endl;
         exit(-1);
     }
@@ -213,9 +214,7 @@ int main(int argc, char *argv[]) {
 
     /** Register memory in both initiator and target */
     agent.registerMem(dram_for_doca, &extra_params);
-    if (role == "target") {
-        agent.getLocalMD(tgt_metadata);
-    }
+    agent.getLocalMD(tgt_metadata);
 
     std::cout << " Start Control Path metadata exchanges \n";
     if (role == "target") {
@@ -230,6 +229,12 @@ int main(int argc, char *argv[]) {
         std::cout << " \t -- To be handled by runtime - currently sent via a TCP Stream\n";
         sendToInitiator(initiator_ip, initiator_port, serdes->exportStr());
         std::cout << " End Control Path metadata exchanges \n";
+
+        std::string rrstr = recvFromTarget(initiator_port);
+        remote_serdes->importStr(rrstr);
+        tgt_md_init = remote_serdes->getStr("AgentMD");
+        assert (tgt_md_init != "");
+        agent.loadRemoteMD(tgt_md_init, target_name);
 
         std::cout << " Start Data Path Exchanges \n";
         std::cout << " Waiting to receive Data from Initiator\n";
@@ -249,8 +254,13 @@ int main(int argc, char *argv[]) {
         remote_serdes->importStr(rrstr);
         tgt_md_init = remote_serdes->getStr("AgentMD");
         assert (tgt_md_init != "");
-        std::string target_name;
         agent.loadRemoteMD(tgt_md_init, target_name);
+
+        /** Sending only local queue info for rdma remote connection */
+        std::cout << " Send queue metadata to Target \n";
+        std::cout << " \t -- To be handled by runtime - currently received via a TCP Stream\n";
+        assert(serdes->addStr("AgentMD", tgt_metadata) == NIXL_SUCCESS);
+        sendToInitiator(initiator_ip, initiator_port, serdes->exportStr());
 
         std::cout << " Verify Deserialized Target's Desc List at Initiator\n";
         nixl_xfer_dlist_t dram_target_doca(remote_serdes);
@@ -282,17 +292,17 @@ int main(int argc, char *argv[]) {
             status = agent.getXferStatus(treq);
             assert(status >= 0);
         }
-        cudaStreamSynchronize(stream);
         std::cout << " Completed Sending Data using DOCA backend\n";
         agent.releaseXferReq(treq);
     }
 
+    cudaStreamSynchronize(stream);
     cudaStreamDestroy(stream);
 
     std::cout <<"Cleanup.. \n";
     agent.deregisterMem(dram_for_doca, &extra_params);
     for (int i = 0; i < NUM_TRANSFERS; i++) {
-        free(addr[i]);
+        cudaFree(addr[i]);
     }
     delete serdes;
     delete remote_serdes;
