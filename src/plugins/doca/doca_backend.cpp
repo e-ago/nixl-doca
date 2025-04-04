@@ -215,7 +215,6 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 	if (result != DOCA_SUCCESS) {
 		DOCA_LOG_ERR("Failed to export RDMA with connection details");
 	}
-
 }
 
 nixl_mem_list_t nixlDocaEngine::getSupportedMems () const {
@@ -270,11 +269,12 @@ nixl_status_t nixlDocaEngine::endConn(const std::string &remote_agent) {
 }
 
 nixl_status_t nixlDocaEngine::getConnInfo(std::string &str) const {
-	// str = nixlSerDes::_bytesToString(workerAddr, workerSize);
+	str = nixlSerDes::_bytesToString(connection_details, conn_det_len);
 	return NIXL_SUCCESS;
 }
 
 nixl_status_t nixlDocaEngine::connect(const std::string &remote_agent) {
+	/* Already connected to remote QP at loadRemoteConnInfo time */
 	return NIXL_SUCCESS;
 }
 
@@ -285,6 +285,32 @@ nixl_status_t nixlDocaEngine::disconnect(const std::string &remote_agent) {
 nixl_status_t nixlDocaEngine::loadRemoteConnInfo (const std::string &remote_agent,
 												 const std::string &remote_conn_info)
 {
+	doca_error_t result;
+	nixlDocaConnection conn;
+	size_t size = remote_conn_info.size();
+	//TODO: eventually std::byte?
+	char* addr = new char[size];
+
+	std::cout << "loadRemoteConnInfo " << remote_agent << "\n";
+	if(remoteConnMap.find(remote_agent) != remoteConnMap.end()) {
+		return NIXL_ERR_INVALID_PARAM;
+	}
+
+	nixlSerDes::_stringToBytes((void*) addr, remote_conn_info, size);
+	result = doca_rdma_connect(rdma, addr, size, connection);
+	if (result != DOCA_SUCCESS) {
+		DOCA_LOG_ERR("Function doca_rdma_connect failed: %s", doca_error_get_descr(result));
+		return NIXL_ERR_BACKEND;
+	}
+
+	conn.remoteAgent = remote_agent;
+	conn.connected = true;
+
+	std::cout << "Connected agent " << remote_agent << "\n";
+	remoteConnMap[remote_agent] = conn;
+
+	delete[] addr;
+
 	return NIXL_SUCCESS;
 }
 
@@ -310,7 +336,7 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	if (result != DOCA_SUCCESS)
 		goto error;
 
-	result = doca_mmap_set_memrange(priv->mem.mmap, (void*)mem.addr, mem.len);
+	result = doca_mmap_set_memrange(priv->mem.mmap, (void*)mem.addr, (size_t)mem.len);
 	if (result != DOCA_SUCCESS)
 		goto error;
 
@@ -339,7 +365,7 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	if (result != DOCA_SUCCESS)
 		goto error;
 
-	result = doca_buf_arr_set_params(priv->mem.barr, priv->mem.mmap, mem.len, 0);
+	result = doca_buf_arr_set_params(priv->mem.barr, priv->mem.mmap, (size_t)mem.len, 0);
 	if (result != DOCA_SUCCESS)
 		goto error;
 
@@ -355,6 +381,7 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	if (result != DOCA_SUCCESS)
 		goto error;
 
+	printf("LocalMMAP addr %p size %d\n", priv->mem.addr, (int)mem.len);
 	out = (nixlBackendMD*) priv; //typecast?
 
 	return NIXL_SUCCESS;
@@ -384,6 +411,8 @@ nixl_status_t nixlDocaEngine::deregisterMem(nixlBackendMD* meta)
 
 nixl_status_t nixlDocaEngine::getPublicData (const nixlBackendMD* meta,
 											std::string &str) const {
+	const nixlDocaPrivateMetadata *priv = (nixlDocaPrivateMetadata*) meta;
+	str = priv->remoteMmapStr;
 	return NIXL_SUCCESS;
 }
 
@@ -396,18 +425,17 @@ nixlDocaEngine::internalMDHelper(const nixl_blob_t &blob,
 	nixlDocaConnection conn;
 	nixlDocaPublicMetadata *md = new nixlDocaPublicMetadata;
 	size_t size = blob.size();
+	auto search = remoteConnMap.find(agent);
 
-	// auto search = remoteConnMap.find(agent);
+	if(search == remoteConnMap.end()) {
+		//TODO: err: remote connection not found
+		DOCA_LOG_ERR("err: remote connection not found");
+		return NIXL_ERR_NOT_FOUND;
+	}
+	conn = (nixlDocaConnection) search->second;
 
-	// if(search == remoteConnMap.end()) {
-	// 	//TODO: err: remote connection not found
-	// 	DOCA_LOG_ERR("err: remote connection not found");
-	// 	return NIXL_ERR_NOT_FOUND;
-	// }
-	// conn = (nixlDocaConnection) search->second;
-
-	// //directly copy underlying conn struct
-	// md->conn = conn;
+	//directly copy underlying conn struct
+	md->conn = conn;
 
 	char *addr = new char[size];
 	nixlSerDes::_stringToBytes(addr, blob, size);
@@ -445,7 +473,7 @@ nixlDocaEngine::internalMDHelper(const nixl_blob_t &blob,
 
 	output = (nixlBackendMD*) md;
 
-	printf("Remote MMAP created %p\n", (void*)md->mem.mmap);
+	printf("Remote MMAP created %p raddr %p size %zd\n", (void*)md->mem.mmap, (void*)addr, size);
 
 	delete[] addr;
 
@@ -462,8 +490,9 @@ nixl_status_t
 nixlDocaEngine::loadLocalMD (nixlBackendMD* input,
 							nixlBackendMD* &output)
 {
-	nixlDocaPrivateMetadata* input_md = (nixlDocaPrivateMetadata*) input;
-	return internalMDHelper(input_md->remoteMmapStr, localAgent, output);
+	/* supportsLocal == false. Should it be true? */
+	// nixlDocaPrivateMetadata* input_md = (nixlDocaPrivateMetadata*) input;
+	// return internalMDHelper(input_md->remoteMmapStr, localAgent, output);
 
 	return NIXL_SUCCESS;
 }

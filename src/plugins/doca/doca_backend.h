@@ -194,9 +194,9 @@ class nixlDocaEngine : public nixlBackendEngine {
         ~nixlDocaEngine();
 
         bool supportsRemote () const { return true; }
-        bool supportsLocal () const { return true; }
-        bool supportsNotif () const { return true; }
-        bool supportsProgTh () const { return pthrOn; }
+        bool supportsLocal () const { return false; }
+        bool supportsNotif () const { return false; }
+        bool supportsProgTh () const { return false; }
 
         nixl_mem_list_t getSupportedMems () const;
 

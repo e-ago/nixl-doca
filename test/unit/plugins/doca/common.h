@@ -34,6 +34,8 @@
 #include <sstream>
 #include <cerrno>
 #include <cstring>
+#include "stream/metadata_stream.h"
+#include "serdes/serdes.h"
 
 #define NUM_TRANSFERS 1
 #define SIZE 1024

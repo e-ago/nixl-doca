@@ -24,14 +24,18 @@ __global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu
 {
     doca_error_t result;
 	struct doca_gpu_buf *lbuf;
+    uintptr_t laddr;
 	struct doca_gpu_buf *rbuf;
+    uintptr_t raddr;
     const int connection_index = 0;
     uint32_t num_ops=0;
 
-    printf(">>>>>>> CUDA kernel: Hey! I'm the rdma write kernel\n");
-
     doca_gpu_dev_buf_get_buf(lbarr, 0, &lbuf);
 	doca_gpu_dev_buf_get_buf(rbarr, 0, &rbuf);
+    doca_gpu_dev_buf_get_addr(lbuf, &laddr);
+    doca_gpu_dev_buf_get_addr(rbuf, &raddr);
+
+    printf(">>>>>>> CUDA kernel: Hey! I'm the rdma write kernel laddr %lx raddr %lx size %d\n", laddr, raddr, (int)size);
 
     //Each thread should send a different buffer
     result = doca_gpu_dev_rdma_write_strong(rdma_gpu, connection_index, rbuf, 0, lbuf, 0, size, 0, DOCA_GPU_RDMA_WRITE_FLAG_NONE);
@@ -42,9 +46,9 @@ __global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu
     if (result != DOCA_SUCCESS)
         printf("Error %d doca_gpu_dev_rdma_push\n", result);
 
-    // result = doca_gpu_dev_rdma_wait_all(rdma_gpu, &num_ops);
-    // if (result != DOCA_SUCCESS)
-    //     printf("Error %d doca_gpu_dev_rdma_push\n", result);
+    result = doca_gpu_dev_rdma_wait_all(rdma_gpu, &num_ops);
+    if (result != DOCA_SUCCESS)
+        printf("Error %d doca_gpu_dev_rdma_wait_all\n", result);
 
     printf("Rdma write kernel completed %d ops\n", num_ops);
 
