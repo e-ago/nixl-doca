@@ -23,10 +23,38 @@
 #include <cassert>
 #include "stream/metadata_stream.h"
 #include "serdes/serdes.h"
-#define NUM_TRANSFERS 1
+#define NUM_TRANSFERS 16
 #define SIZE 1024
 #define INITIATOR_VALUE 0xbb
 #define VOLATILE(x) (*(volatile typeof(x) *)&(x))
+#define INITIATOR_THRESHOLD_NS 50000 //50us
+#define USE_NVTX 1
+
+#if USE_NVTX
+#include <nvtx3/nvToolsExt.h>
+
+const uint32_t colors[] = { 0xff00ff00, 0xff0000ff, 0xffffff00, 0xffff00ff, 0xff00ffff, 0xffff0000, 0xffffffff };
+const int num_colors = sizeof(colors)/sizeof(uint32_t);
+
+#define DEVICE_GET_TIME(globaltimer) asm volatile("mov.u64 %0, %globaltimer;" : "=l"(globaltimer))
+
+#define PUSH_RANGE(name,cid) { \
+    int color_id = cid; \
+    color_id = color_id%num_colors;\
+    nvtxEventAttributes_t eventAttrib = {0}; \
+    eventAttrib.version = NVTX_VERSION; \
+    eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE; \
+    eventAttrib.colorType = NVTX_COLOR_ARGB; \
+    eventAttrib.color = colors[color_id]; \
+    eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII; \
+    eventAttrib.message.ascii = name; \
+    nvtxRangePushEx(&eventAttrib); \
+}
+#define POP_RANGE nvtxRangePop();
+#else
+#define PUSH_RANGE(name,cid)
+#define POP_RANGE
+#endif
 
 static void checkCudaError(cudaError_t result, const char *message) {
 	if (result != cudaSuccess) {
@@ -77,9 +105,15 @@ int launch_target_wait_kernel(cudaStream_t stream, uintptr_t addr, size_t size)
 
 __global__ void initiator_kernel(uintptr_t addr, size_t size)
 {
-    printf(">>>>>>> CUDA initiator send on addr %p size %d\n", (void*)addr, (uint32_t)size);
-    for (int i = 0; i < (int)size; i++)
-        ((uint8_t*)addr)[i] = INITIATOR_VALUE;
+    unsigned long long start, end;
+
+    ((uint8_t*)addr)[threadIdx.x] = INITIATOR_VALUE;
+
+    /* Simulate a longer CUDA kernel to process initiator data */
+    DEVICE_GET_TIME(start);
+    do {
+        DEVICE_GET_TIME(end);
+    } while (end - start < INITIATOR_THRESHOLD_NS);
 }
 
 int launch_initiator_send_kernel(cudaStream_t stream, uintptr_t addr, size_t size)
@@ -93,7 +127,7 @@ int launch_initiator_send_kernel(cudaStream_t stream, uintptr_t addr, size_t siz
         return -1;
     }
 
-    initiator_kernel<<<1, 1, 0, stream>>>(addr, size);
+    initiator_kernel<<<1, SIZE, 0, stream>>>(addr, size);
     result = cudaGetLastError();
     if (result != cudaSuccess) {
         fprintf(stderr, "[%s:%d] cuda failed with %s", __FILE__, __LINE__, cudaGetErrorString(result));
@@ -140,8 +174,8 @@ int main(int argc, char *argv[]) {
     std::string             role;
     const char              *initiator_ip;
     nixl_blob_t             remote_desc;
-    nixl_blob_t             tgt_metadata;
-    nixl_blob_t             tgt_md_init;
+    nixl_blob_t             metadata;
+    nixl_blob_t             remote_metadata;
     int                     status = 0;
 
     /** NIXL declarations */
@@ -189,7 +223,9 @@ int main(int argc, char *argv[]) {
     nixlAgent     agent(role, cfg);
     params["network_devices"] = "mlx5_0";
 	params["gpu_devices"] = "8A:00.0";
+    PUSH_RANGE("createBackend", 0)
     agent.createBackend("DOCA", params, doca);
+    POP_RANGE
 
     nixl_opt_args_t extra_params;
     extra_params.backends.push_back(doca);
@@ -214,7 +250,7 @@ int main(int argc, char *argv[]) {
 
     /** Register memory in both initiator and target */
     agent.registerMem(dram_for_doca, &extra_params);
-    agent.getLocalMD(tgt_metadata);
+    agent.getLocalMD(metadata);
 
     std::cout << " Start Control Path metadata exchanges \n";
     if (role == "target") {
@@ -222,7 +258,7 @@ int main(int argc, char *argv[]) {
         dram_for_doca.print();
 
         /** Sending both metadata strings together */
-        assert(serdes->addStr("AgentMD", tgt_metadata) == NIXL_SUCCESS);
+        assert(serdes->addStr("AgentMD", metadata) == NIXL_SUCCESS);
         assert(dram_for_doca.trim().serialize(serdes) == NIXL_SUCCESS);
 
         std::cout << " Serialize Metadata to string and Send to Initiator\n";
@@ -232,18 +268,18 @@ int main(int argc, char *argv[]) {
 
         std::string rrstr = recvFromTarget(initiator_port);
         remote_serdes->importStr(rrstr);
-        tgt_md_init = remote_serdes->getStr("AgentMD");
-        assert (tgt_md_init != "");
-        agent.loadRemoteMD(tgt_md_init, target_name);
+        remote_metadata = remote_serdes->getStr("AgentMD");
+        assert (remote_metadata != "");
+        agent.loadRemoteMD(remote_metadata, target_name);
 
         std::cout << " Start Data Path Exchanges \n";
         std::cout << " Waiting to receive Data from Initiator\n";
 
         //Only works with progress thread now, as backend is protected
         /** Sanity Check , assume NUM_TRANSFERS == 1 */
-        for (int i = 0; i < NUM_TRANSFERS; i++) {
+        for (int i = 0; i < NUM_TRANSFERS; i++)
             launch_target_wait_kernel(stream, (uintptr_t)addr[i], SIZE);
-        }
+
         cudaStreamSynchronize(stream);
         std::cout << " DOCA Transfer completed!\n";
     } else {
@@ -252,47 +288,54 @@ int main(int argc, char *argv[]) {
         std::string rrstr = recvFromTarget(initiator_port);
 
         remote_serdes->importStr(rrstr);
-        tgt_md_init = remote_serdes->getStr("AgentMD");
-        assert (tgt_md_init != "");
-        agent.loadRemoteMD(tgt_md_init, target_name);
+        remote_metadata = remote_serdes->getStr("AgentMD");
+        assert (remote_metadata != "");
+        agent.loadRemoteMD(remote_metadata, target_name);
 
         /** Sending only local queue info for rdma remote connection */
         std::cout << " Send queue metadata to Target \n";
         std::cout << " \t -- To be handled by runtime - currently received via a TCP Stream\n";
-        assert(serdes->addStr("AgentMD", tgt_metadata) == NIXL_SUCCESS);
+        assert(serdes->addStr("AgentMD", metadata) == NIXL_SUCCESS);
         sendToInitiator(initiator_ip, initiator_port, serdes->exportStr());
 
         std::cout << " Verify Deserialized Target's Desc List at Initiator\n";
         nixl_xfer_dlist_t dram_target_doca(remote_serdes);
         nixl_xfer_dlist_t dram_initiator_doca = dram_for_doca.trim();
         dram_target_doca.print();
-
         std::cout << " Got metadata from " << target_name << " \n";
-        std::cout << " End Control Path metadata exchanges \n";
-        std::cout << " Start Data Path Exchanges \n\n";
-        std::cout << " Create transfer request with DOCA backend\n ";
 
-        std::cout << "Launch initiator send kernel on stream\n";
-        // Assume NUM_TRANSFERS == 1 for now
-        launch_initiator_send_kernel(stream, buf[0].addr, buf[0].len);    
+        std::cout << " Create transfer request with DOCA backend\n ";
         extra_params.customParam = (uintptr_t)stream;
+        PUSH_RANGE("createXferReq", 1)
         ret = agent.createXferReq(NIXL_WRITE, dram_initiator_doca, dram_target_doca,
                                   "target", treq, &extra_params);
+        POP_RANGE
         if (ret != NIXL_SUCCESS) {
             std::cerr << "Error creating transfer request\n";
             exit(-1);
         }
 
+        std::cout << "Launch initiator send kernel on stream\n";
+        // Assume NUM_TRANSFERS == 1 for now
+        PUSH_RANGE("InitKernels", 2)
+        for (int i = 0; i < NUM_TRANSFERS; i++)
+            launch_initiator_send_kernel(stream, buf[i].addr, buf[i].len);
+        POP_RANGE
+
         std::cout << " Post the request with DOCA backend\n ";
+        PUSH_RANGE("postXferReq", 3)
         status = agent.postXferReq(treq);
+        POP_RANGE
         std::cout << " Initiator posted Data Path transfer\n";
         std::cout << " Waiting for completion\n";
 
+        PUSH_RANGE("getXferStatus", 4)
         while (status != NIXL_SUCCESS) {
             status = agent.getXferStatus(treq);
             assert(status >= 0);
         }
-        std::cout << " Completed Sending Data using DOCA backend\n";
+        POP_RANGE
+        std::cout << " Completed Sending " << NUM_TRANSFERS << " transfers using DOCA backend\n";
         agent.releaseXferReq(treq);
     }
 

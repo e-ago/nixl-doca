@@ -25,17 +25,10 @@ dependency_gpunetio_device = declare_dependency(compile_args : '-Wl,--whole-arch
 
 gpu_cuda_args = []
 compile_flags += '-D DOCA_ALLOW_EXPERIMENTAL_API'
-#if doca_path != ''
-#  doca_lib_path = doca_path + '/lib/x86_64-linux-gnu'
-#  doca_inc_path = doca_path + '/include'
-#  doca_dep = declare_dependency(
-#    #link_args : ['-L' + doca_lib_path, '-libdoca_rdma'], # -libdoca_common -libdoca_gpunetio -libdoca_gpunetio_device
-#    include_directories : include_directories(doca_inc_path))
-#endif
 
 if 'DOCA' in static_plugins
     doca_backend_lib = static_library('DOCA',
-               'doca_backend.cpp', 'doca_backend.h', 'doca_plugin.cpp', 'kernel_write.cu',
+               'doca_backend.cpp', 'doca_backend.h', 'doca_plugin.cpp', 'kernel_write.cu', 'kernel_read.cu',
                dependencies: [nixl_infra, serdes_interface, cuda_dep, doca_dep0, doca_dep1, doca_dep2, dependency_gpunetio_device],
                include_directories: nixl_inc_dirs,
                install: false,
@@ -44,7 +37,7 @@ if 'DOCA' in static_plugins
                name_prefix: 'libplugin_')  # Custom prefix for plugin libraries
 else
     doca_backend_lib = shared_library('DOCA',
-               'doca_backend.cpp', 'doca_backend.h', 'doca_plugin.cpp', 'kernel_write.cu',
+               'doca_backend.cpp', 'doca_backend.h', 'doca_plugin.cpp', 'kernel_write.cu', 'kernel_read.cu',
                dependencies: [nixl_infra, serdes_interface, cuda_dep, doca_dep0, doca_dep1, doca_dep2, dependency_gpunetio_device],
                include_directories: [nixl_inc_dirs, utils_inc_dirs],
                install: true,

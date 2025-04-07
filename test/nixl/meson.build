@@ -18,10 +18,12 @@ ucx_backend_dep = declare_dependency(link_with: ucx_backend_lib, include_directo
 if cuda_dep.found()
     cuda_dependencies = [cuda_dep]
     cpp_args = '-DUSE_VRAM'
+    nvtx_dep = nvcc.find_library('nvToolsExt', required: true)
 else
     cuda_dependencies = []
     cpp_args = '-UUSE_VRAM'
 endif
+
 
 desc_example = executable('desc_example',
            'desc_example.cpp',
@@ -43,7 +45,7 @@ nixl_ucx_app  = executable('nixl_test', 'nixl_test.cpp',
                            link_with: [serdes_lib], install: true)
 
 nixl_doca_app  = executable('nixl_doca_cuda_test', 'nixl_doca_cuda_test.cu',
-                           dependencies: [nixl_dep, nixl_infra, stream_interface] + cuda_dep,
+                           dependencies: [nixl_dep, nixl_infra, stream_interface] + cuda_dep + nvtx_dep,
                            include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes'],
                            link_with: [serdes_lib], install: true)
 

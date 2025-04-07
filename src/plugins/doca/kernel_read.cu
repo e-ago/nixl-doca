@@ -20,8 +20,9 @@
 
 #include "doca_backend.h"
 
-__global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct docaXferReqGpu *xferReqRing, uint32_t pos)
+__global__ void kernel_read(struct doca_gpu_dev_rdma *rdma_gpu, struct docaXferReqGpu *xferReqRing, uint32_t pos)
 {
+    //struct doca_gpu_buf_arr *lbarr, struct doca_gpu_buf_arr *rbarr, size_t size
     doca_error_t result;
 	struct doca_gpu_buf *lbuf;
 	struct doca_gpu_buf *rbuf;
@@ -38,12 +39,12 @@ __global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct docaXfer
     doca_gpu_dev_buf_get_buf((struct doca_gpu_buf_arr *)xferReqRing[pos].larr[threadIdx.x], 0, &lbuf);
 	doca_gpu_dev_buf_get_buf((struct doca_gpu_buf_arr *)xferReqRing[pos].rarr[threadIdx.x], 0, &rbuf);
 
-    // printf(">>>>>>> CUDA rdma write kernel thread %d pos %d size %d\n", threadIdx.x, pos, (int)xferReqRing[pos].size[threadIdx.x]);
+    // printf(">>>>>>> CUDA rdma read kernel thread %d pos %d size %d\n", threadIdx.x, pos, (int)xferReqRing[pos].size[threadIdx.x]);
 
     //Each thread should send a different buffer
-    result = doca_gpu_dev_rdma_write_strong(rdma_gpu, connection_index, rbuf, 0, lbuf, 0, xferReqRing[pos].size[threadIdx.x], 0, DOCA_GPU_RDMA_WRITE_FLAG_NONE);
+    result = doca_gpu_dev_rdma_read_strong(rdma_gpu, connection_index, rbuf, 0, lbuf, 0, xferReqRing[pos].size[threadIdx.x], 0);
     if (result != DOCA_SUCCESS)
-        printf("Error %d doca_gpu_dev_rdma_write_strong\n", result);
+        printf("Error %d doca_gpu_dev_rdma_read_strong\n", result);
 
     __syncthreads();
 
@@ -56,21 +57,22 @@ __global__ void kernel_write(struct doca_gpu_dev_rdma *rdma_gpu, struct docaXfer
         if (result != DOCA_SUCCESS)
             printf("Error %d doca_gpu_dev_rdma_wait_all\n", result);
 
-        // printf(">>>>>>> CUDA rdma write kernel pos %d num %d completed %d ops\n", pos, xferReqRing[pos].num, num_ops);
+        // printf(">>>>>>> CUDA rdma read kernel pos %d num %d completed %d ops\n", pos, xferReqRing[pos].num, num_ops);
 
         xferReqRing[pos].num = 0;
+        __threadfence_system();
     }
 
 }
 
 extern "C" {
 
-doca_error_t doca_kernel_write(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct docaXferReqGpu *xferReqRing, uint32_t pos)
+doca_error_t doca_kernel_read(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct docaXferReqGpu *xferReqRing, uint32_t pos)
 {
     cudaError_t result = cudaSuccess;
 
     if (rdma_gpu == NULL) {
-        fprintf(stderr, "kernel_write_server invalid input values");
+        fprintf(stderr, "kernel_read_server invalid input values");
         return DOCA_ERROR_INVALID_VALUE;
     }
 
@@ -81,7 +83,7 @@ doca_error_t doca_kernel_write(cudaStream_t stream, struct doca_gpu_dev_rdma *rd
         return DOCA_ERROR_BAD_STATE;
     }
 
-    kernel_write<<<1, DOCA_XFER_REQ_SIZE, 0, stream>>>(rdma_gpu, xferReqRing, pos);
+    kernel_read<<<1, DOCA_XFER_REQ_SIZE, 0, stream>>>(rdma_gpu, xferReqRing, pos);
     result = cudaGetLastError();
     if (result != cudaSuccess) {
         fprintf(stderr, "[%s:%d] cuda failed with %s", __FILE__, __LINE__, cudaGetErrorString(result));

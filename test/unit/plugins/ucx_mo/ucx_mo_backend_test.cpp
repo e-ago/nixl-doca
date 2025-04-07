@@ -135,8 +135,8 @@ void allocateBuffer(nixl_mem_t mem_type, int dev_id, size_t len, void* &addr)
 {
     switch(mem_type) {
     case DRAM_SEG:
-        //addr = calloc(1, len);
-        posix_memalign(&addr, 4096, len);
+        addr = calloc(1, len);
+        //posix_memalign(&addr, 4096, len);
         break;
 #ifdef HAVE_CUDA
     case VRAM_SEG:{

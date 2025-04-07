@@ -22,6 +22,7 @@
 #include <iostream>
 #include <thread>
 #include <mutex>
+#include <atomic>
 
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -47,6 +48,8 @@
 #define DOCA_DEVINFO_IBDEV_NAME_SIZE 64
 #define RDMA_RECV_QUEUE_SIZE 2048
 #define RDMA_SEND_QUEUE_SIZE 2048
+#define DOCA_XFER_REQ_SIZE 512
+#define DOCA_XFER_REQ_MAX 16
 
 typedef enum {CONN_CHECK, NOTIF_STR, DISCONNECT} ucx_cb_op_t;
 
@@ -112,9 +115,15 @@ class nixlDocaPublicMetadata : public nixlBackendMD {
         }
 };
 
+struct docaXferReqGpu {
+    uintptr_t larr[DOCA_XFER_REQ_SIZE];
+    uintptr_t rarr[DOCA_XFER_REQ_SIZE];
+    size_t size[DOCA_XFER_REQ_SIZE];
+    uint16_t num;
+};
+
 class nixlDocaEngine : public nixlBackendEngine {
     private:
-
         struct doca_gpu *gdev; /* GPUNetio handler associated to queues */
 	    struct doca_dev *ddev;	  /* DOCA device handler associated to queues */
         struct doca_log_backend *sdk_log;
@@ -124,47 +133,26 @@ class nixlDocaEngine : public nixlBackendEngine {
         const void *connection_details;	    /* Remote peer connection details */
         size_t conn_det_len;		    /* Remote peer connection details data length */    
         struct doca_rdma_connection *connection;
-
-        /* Progress thread data */
-        volatile bool pthrStop, pthrActive, pthrOn;
-        int noSyncIters;
-        std::thread pthr;
-        nixlTime::us_t pthrDelay;
-
-        /* Notifications */
-        notif_list_t notifMainList;
-        std::mutex  notifMtx;
-        notif_list_t notifPthrPriv, notifPthr;
-
+        struct docaXferReqGpu *xferReqRingGpu;
+        struct docaXferReqGpu *xferReqRingCpu;
+        std::atomic<uint32_t> xferRingPos;
+        uint32_t firstXferRingPos;
         // Map of agent name to saved nixlDocaConnection info
         std::unordered_map<std::string, nixlDocaConnection,
                            std::hash<std::string>, strEqual> remoteConnMap;
 
         class nixlDocaBckndReq : public nixlLinkElem<nixlDocaBckndReq>, public nixlBackendReqH {
             private:
-                int _completed;
             public:
                 cudaStream_t stream;
-                cudaEvent_t event;
-                bool launched;
-                std::string *amBuffer;
+                uint32_t start_pos;
+                uint32_t end_pos;
 
                 nixlDocaBckndReq() : nixlLinkElem(), nixlBackendReqH() {
-                    _completed = 0;
-                    launched = false;
-                    amBuffer = NULL;
                 }
 
                 ~nixlDocaBckndReq() {
-                    _completed = 0;
-                    launched = false;
-                    if (amBuffer) {
-                        delete amBuffer;
-                    }
                 }
-
-                bool is_complete() { return _completed; }
-                void completed() { _completed = 1; }
         };
 
         // Request management
@@ -178,18 +166,6 @@ class nixlDocaEngine : public nixlBackendEngine {
         nixl_status_t internalMDHelper (const nixl_blob_t &blob,
                                         const std::string &agent,
                                         nixlBackendMD* &output);
-
-        // Notifications
-        nixl_status_t notifSendPriv(const std::string &remote_agent,
-                                    const std::string &msg, nixlDocaReq &req);
-        void notifProgress();
-        void notifCombineHelper(notif_list_t &src, notif_list_t &tgt);
-        void notifProgressCombineHelper(notif_list_t &src, notif_list_t &tgt);
-
-
-        // Data transfer (priv)
-        nixl_status_t retHelper(nixl_status_t ret, nixlDocaBckndReq *head, nixlDocaReq &req);
-
     public:
         nixlDocaEngine(const nixlBackendInitParams* init_params);
         ~nixlDocaEngine();
@@ -259,17 +235,9 @@ doca_error_t doca_util_map_and_export(struct doca_dev *dev, uint32_t permissions
 extern "C" {
 #endif
 
-/*
- * Launch a CUDA kernel doing RDMA Write client
- *
- * @stream [in]: CUDA Stream to launch the kernel
- * @rdma_gpu [in]: DOCA RDMA GPU object
- * @lbarr [in]: Local buffer array
- * @rbarr [in]: Remote buffer array
- * @size [in]: Bytes to send
- * @return: DOCA_SUCCESS on success and DOCA_ERROR otherwise
- */
-doca_error_t doca_kernel_write(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct doca_gpu_buf_arr *lbarr, struct doca_gpu_buf_arr *rbarr, size_t size);
+doca_error_t doca_kernel_write(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct docaXferReqGpu *xferReqRing, uint32_t pos);
+doca_error_t doca_kernel_read(cudaStream_t stream, struct doca_gpu_dev_rdma *rdma_gpu, struct docaXferReqGpu *xferReqRing, uint32_t pos);
+
 #if __cplusplus
 }
 #endif
