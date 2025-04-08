@@ -124,7 +124,7 @@ struct docaXferReqGpu {
 
 class nixlDocaEngine : public nixlBackendEngine {
     private:
-        struct doca_gpu *gdev; /* GPUNetio handler associated to queues */
+        std::vector<std::pair<uint32_t, struct doca_gpu *>> gdevs; /* List of DOCA GPUNetIO device handlers */
 	    struct doca_dev *ddev;	  /* DOCA device handler associated to queues */
         struct doca_log_backend *sdk_log;
         struct doca_rdma *rdma;		    /* DOCA RDMA instance */
@@ -145,6 +145,7 @@ class nixlDocaEngine : public nixlBackendEngine {
             private:
             public:
                 cudaStream_t stream;
+                uint32_t devId;
                 uint32_t start_pos;
                 uint32_t end_pos;
 

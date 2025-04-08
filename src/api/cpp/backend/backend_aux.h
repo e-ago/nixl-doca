@@ -33,6 +33,7 @@ class nixlBackendOptionalArgs {
         // During postXfer, user might ask for a notification if supported
         nixl_blob_t notifMsg;
         bool        hasNotif = false;
+        uint32_t devId;
         uintptr_t customParam;
 };
 

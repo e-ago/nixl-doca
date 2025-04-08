@@ -93,8 +93,7 @@ open_doca_device_with_ibdev_name(const uint8_t *value, size_t val_size, struct d
 nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 : nixlBackendEngine (init_params)
 {
-	std::vector<std::string> ndevs; /* Empty vector */
-	std::vector<std::string> gdevs; /* Empty vector */
+	std::vector<std::string> ndevs, tmp_gdevs; /* Empty vector */
 	doca_error_t result;
 	nixl_b_params_t* custom_params = init_params->customParams;
 
@@ -110,10 +109,11 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 	if (result != DOCA_SUCCESS)
 		throw std::invalid_argument("Can't initialize doca log");
 
-	if (custom_params->count("network_devices")!=0)
+	if (custom_params->count("network_devices") !=0 )
 		ndevs = str_split((*custom_params)["network_devices"], " ");
-	if (custom_params->count("gpu_devices")!=0)
-		gdevs = str_split((*custom_params)["gpu_devices"], " ");
+	// Temporary: will extend to more NICs in a dedicated PR
+	if (ndevs.size() > 1)
+		throw std::invalid_argument("Only 1 network device is allowed");
 
 	std::cout << "DOCA network devices:" << std::endl;
 	for (const std::string& str : ndevs) {
@@ -121,17 +121,19 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 	}
 	std::cout << std::endl;
 
-	if (ndevs.size() > 1)
-		throw std::invalid_argument("Only 1 network device is allowed");
+	if (custom_params->count("gpu_devices") == 0)
+		throw std::invalid_argument("At least 1 GPU device must be specified");
+	// Temporary: will extend to more GPUs in a dedicated PR
+	if (custom_params->count("gpu_devices") > 1)
+		throw std::invalid_argument("Only 1 GPU device is allowed");
 
 	std::cout << "DOCA GPU devices:" << std::endl;
-	for (const std::string& str : gdevs) {
-		std::cout << str << " ";
+	tmp_gdevs = str_split((*custom_params)["gpu_devices"], " ");
+	for (auto &cuda_id : tmp_gdevs) {
+		gdevs.push_back(std::pair((uint32_t)std::stoi(cuda_id), nullptr));
+		std::cout << "cuda_id " << cuda_id << " int " << std::stoi(cuda_id) << "\n";
 	}
 	std::cout << std::endl;
-
-	if (gdevs.size() > 1)
-		throw std::invalid_argument("Only 1 GPU device is allowed");
 
 	/* Open DOCA device */
 	result = open_doca_device_with_ibdev_name((const uint8_t *)(ndevs[0].c_str()),
@@ -141,13 +143,15 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 		throw std::invalid_argument("Failed to open DOCA device");
 	}
 
-	/* Create DOCA GPU */
-	result = doca_gpu_create(gdevs[0].c_str(), &gdev);
-	if (result != DOCA_SUCCESS) {
-		DOCA_LOG_ERR("Failed to create DOCA GPU device: %s", doca_error_get_descr(result));
+	char pciBusId[DOCA_DEVINFO_IBDEV_NAME_SIZE];
+	for (auto &item : gdevs) {
+		std::cout << "item.first " << item.first << "\n";
+		cudaDeviceGetPCIBusId(pciBusId, DOCA_DEVINFO_IBDEV_NAME_SIZE, item.first);
+		result = doca_gpu_create(pciBusId, &item.second);
+		if (result != DOCA_SUCCESS) {
+			DOCA_LOG_ERR("Failed to create DOCA GPU device: %s", doca_error_get_descr(result));
+		}
 	}
-
-	// std::cout << "GPU " << gdev << "and NIC " << ddev << " created" << std::endl;
 
 	/* Create DOCA RDMA instance */
 	result = doca_rdma_create(ddev, &(rdma));
@@ -184,7 +188,7 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 	}
 
 	/* Setup datapath of RDMA CTX on GPU */
-	result = doca_ctx_set_datapath_on_gpu(rdma_ctx, gdev);
+	result = doca_ctx_set_datapath_on_gpu(rdma_ctx, gdevs[0].second);
 	if (result != DOCA_SUCCESS) {
 		DOCA_LOG_ERR("Failed to set datapath on GPU: %s", doca_error_get_descr(result));
 	}
@@ -217,7 +221,7 @@ nixlDocaEngine::nixlDocaEngine (const nixlBackendInitParams* init_params)
 	}
 
 	//GDRCopy
-	result = doca_gpu_mem_alloc(gdev, sizeof(struct docaXferReqGpu) * DOCA_XFER_REQ_MAX,
+	result = doca_gpu_mem_alloc(gdevs[0].second, sizeof(struct docaXferReqGpu) * DOCA_XFER_REQ_MAX,
 		4096,
 		DOCA_GPU_MEM_TYPE_GPU_CPU,
 		(void **)&xferReqRingGpu,
@@ -255,7 +259,7 @@ nixlDocaEngine::~nixlDocaEngine () {
 		return;
 	}
 
-	doca_gpu_mem_free(gdev, xferReqRingGpu);
+	doca_gpu_mem_free(gdevs[0].second, xferReqRingGpu);
 
 	result = doca_ctx_stop(rdma_ctx);
 	if (result != DOCA_SUCCESS)
@@ -269,7 +273,7 @@ nixlDocaEngine::~nixlDocaEngine () {
 	if (result != DOCA_SUCCESS)
 		DOCA_LOG_ERR("Failed to close DOCA device: %s", doca_error_get_descr(result));
 
-	result = doca_gpu_destroy(gdev);
+	result = doca_gpu_destroy(gdevs[0].second);
 	if (result != DOCA_SUCCESS)
 		DOCA_LOG_ERR("Failed to close DOCA GPU device: %s", doca_error_get_descr(result));
 }
@@ -350,6 +354,15 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	struct ibv_pd *pd;
 	uint32_t mkey;
 
+	auto it = std::find_if(gdevs.begin(), gdevs.end(),
+							[&mem](std::pair<uint32_t, struct doca_gpu*> &x)
+							{ return x.first == mem.devId; }
+						);
+	if (it == gdevs.end()) {
+		std::cout << "Can't register memory for unknown device " << mem.devId << std::endl;
+		return NIXL_ERR_INVALID_PARAM;
+	}
+
 	result = doca_mmap_create(&(priv->mem.mmap));
 	if (result != DOCA_SUCCESS)
 		return NIXL_ERR_BACKEND;
@@ -392,7 +405,7 @@ nixl_status_t nixlDocaEngine::registerMem (const nixlBlobDesc &mem,
 	if (result != DOCA_SUCCESS)
 		goto error;
 
-	result = doca_buf_arr_set_target_gpu(priv->mem.barr, gdev);
+	result = doca_buf_arr_set_target_gpu(priv->mem.barr, gdevs[mem.devId].second);
 	if (result != DOCA_SUCCESS)
 		goto error;
 
@@ -485,7 +498,7 @@ nixlDocaEngine::internalMDHelper(const nixl_blob_t &blob,
 	if (result != DOCA_SUCCESS)
 		goto error;
 
-	result = doca_buf_arr_set_target_gpu(md->mem.barr, gdev);
+	result = doca_buf_arr_set_target_gpu(md->mem.barr, gdevs[0].second);
 	if (result != DOCA_SUCCESS)
 		goto error;
 
@@ -549,11 +562,22 @@ nixl_status_t nixlDocaEngine::prepXfer (const nixl_xfer_op_t &operation,
 {
 	uint32_t pos;
 	nixlDocaBckndReq *treq = new nixlDocaBckndReq;
-	treq->stream = (cudaStream_t)opt_args->customParam;
 	nixlDocaPrivateMetadata *lmd;
 	nixlDocaPublicMetadata *rmd;
 	uint32_t lcnt = (uint32_t)local.descCount();
 	uint32_t rcnt = (uint32_t)remote.descCount();
+
+	treq->stream = (cudaStream_t)opt_args->customParam;
+	treq->devId = (uint32_t)opt_args->devId;
+
+	auto it = std::find_if(gdevs.begin(), gdevs.end(),
+							[&treq](std::pair<uint32_t, struct doca_gpu*> &x)
+							{ return x.first == treq->devId; }
+						);
+	if (it == gdevs.end()) {
+		std::cout << "Can't prepare transfer for unknown device " << treq->devId << std::endl;
+		return NIXL_ERR_INVALID_PARAM;
+	}
 
 	if (lcnt != rcnt)
 		return NIXL_ERR_INVALID_PARAM;

@@ -23,7 +23,7 @@
 #include <cassert>
 #include "stream/metadata_stream.h"
 #include "serdes/serdes.h"
-#define NUM_TRANSFERS 16
+#define NUM_TRANSFERS 32
 #define SIZE 1024
 #define INITIATOR_VALUE 0xbb
 #define VOLATILE(x) (*(volatile typeof(x) *)&(x))
@@ -222,7 +222,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Starting Agent for "<< role << "\n";
     nixlAgent     agent(role, cfg);
     params["network_devices"] = "mlx5_0";
-	params["gpu_devices"] = "8A:00.0";
+	params["gpu_devices"] = "0";
     PUSH_RANGE("createBackend", 0)
     agent.createBackend("DOCA", params, doca);
     POP_RANGE
@@ -305,6 +305,7 @@ int main(int argc, char *argv[]) {
         std::cout << " Got metadata from " << target_name << " \n";
 
         std::cout << " Create transfer request with DOCA backend\n ";
+        extra_params.devId = 0;
         extra_params.customParam = (uintptr_t)stream;
         PUSH_RANGE("createXferReq", 1)
         ret = agent.createXferReq(NIXL_WRITE, dram_initiator_doca, dram_target_doca,
