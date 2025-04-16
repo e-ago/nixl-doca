@@ -139,7 +139,7 @@ class nixlAgentOptionalArgs {
         /**
          * @var Backend custom parameter
          */
-        uintptr_t customParam;
+        nixl_blob_t customParam;
 };
 /**
  * @brief A typedef for a nixlAgentOptionalArgs
