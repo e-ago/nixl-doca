@@ -71,9 +71,9 @@ __global__ void target_kernel_v2(uintptr_t addr, size_t size)
     uint8_t ok = 1;
 
     printf(">>>>>>> CUDA target v2 waiting on addr %p size %d\n", (void*)addr, (uint32_t)size);
-    while(VOLATILE(((uint8_t*)addr)[0]) == INITIATOR_VALUE);
+    while(VOLATILE(((uint8_t*)addr)[0]) == 0);
     for (int i = 0; i < (int)size; i++) {
-        if (((uint8_t*)addr)[i] != INITIATOR_VALUE+1) {
+        if (((uint8_t*)addr)[i] != INITIATOR_VALUE) {
             printf(">>>>>>> CUDA target byte %x is wrong\n", i);
             ok = 1;
         }
@@ -107,7 +107,7 @@ int launch_target_wait_kernel_v2(cudaStream_t stream, uintptr_t addr, size_t siz
 
 __global__ void initiator_kernel_v2(uintptr_t addr, size_t size, uintptr_t gtreq)
 {
-    ((uint8_t*)addr)[threadIdx.x] = INITIATOR_VALUE+1;
+    ((uint8_t*)addr)[threadIdx.x] = INITIATOR_VALUE;
 
     __syncthreads();
 
