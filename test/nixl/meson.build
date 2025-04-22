@@ -46,7 +46,7 @@ nixl_ucx_app  = executable('nixl_test', 'nixl_test.cpp',
 
 nixl_doca_stream_app  = executable('nixl_doca_stream_test', 'nixl_doca_stream_test.cu',
                            dependencies: [nixl_dep, nixl_infra, stream_interface] + cuda_dep + nvtx_dep,
-                           include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes'],
+                           include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes', '../../src/plugins/doca/public'],
                            link_with: [serdes_lib], install: true)
 
 if dependency('doca-gpunetio').found()
@@ -58,7 +58,7 @@ if dependency('doca-gpunetio').found()
 
     nixl_doca_device_app  = executable('nixl_doca_device_test', 'nixl_doca_device_test.cu',
                            dependencies: [nixl_dep, nixl_infra, stream_interface] + plugin_doca_deps + cuda_dep + nvtx_dep,
-                           include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes'],
+                           include_directories: [nixl_inc_dirs, utils_inc_dirs, '../../src/utils/serdes', '../../src/plugins/doca/public'],
                            link_with: [serdes_lib], install: true)
 endif
 

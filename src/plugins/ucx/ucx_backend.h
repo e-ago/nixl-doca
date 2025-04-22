@@ -203,7 +203,7 @@ class nixlUcxEngine : public nixlBackendEngine {
         bool supportsLocal () const { return true; }
         bool supportsNotif () const { return true; }
         bool supportsProgTh () const { return pthrOn; }
-        bool supportsTreqGpu () const { return false; }
+        bool supportsGpuInitiated () const { return false; }
 
         nixl_mem_list_t getSupportedMems () const;
 

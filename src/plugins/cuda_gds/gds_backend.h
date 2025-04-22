@@ -124,7 +124,7 @@ class nixlGdsEngine : public nixlBackendEngine {
             return false;
         }
 
-        bool supportsTreqGpu () const {
+        bool supportsGpuInitiated () const {
             return false;
         }
 

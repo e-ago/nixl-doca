@@ -41,7 +41,7 @@
 
 #include "nixl.h"
 #include "backend/backend_engine.h"
-#include "backend/backend_plugin_doca_common.h"
+#include "public/backend_plugin_doca_common.h"
 #include "common/str_tools.h"
 
 // Local includes
@@ -194,7 +194,7 @@ class nixlDocaEngine : public nixlBackendEngine {
         bool supportsLocal () const { return false; }
         bool supportsNotif () const { return false; }
         bool supportsProgTh () const { return false; }
-        bool supportsTreqGpu () const { return true; }
+        bool supportsGpuInitiated () const { return true; }
         
         nixl_mem_list_t getSupportedMems () const;
 

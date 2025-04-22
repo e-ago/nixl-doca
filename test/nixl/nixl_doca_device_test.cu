@@ -20,7 +20,7 @@
 #include <nixl_descriptors.h>
 #include <nixl_params.h>
 #include <nixl.h>
-#include "backend/backend_plugin_doca_device.cuh"
+#include "backend_plugin_doca_device.cuh"
 #include <cassert>
 #include "stream/metadata_stream.h"
 #include "serdes/serdes.h"

@@ -86,7 +86,7 @@ class nixlBackendEngine {
         virtual bool supportsProgTh () const = 0;
 
         // Determines if a backend supports posting tranfers requests from GPU.
-        virtual bool supportsTreqGpu () const = 0;
+        virtual bool supportsGpuInitiated () const = 0;
 
         virtual nixl_mem_list_t getSupportedMems () const = 0;
 
