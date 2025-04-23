@@ -117,16 +117,6 @@ class nixlBackendEngine {
                                         const nixl_opt_b_args_t* opt_args=nullptr
                                        ) = 0;
 
-        // Preparing a request to be posted from the GPU
-        virtual nixl_status_t prepXfer (const nixl_xfer_op_t &operation,
-                                        const nixl_meta_dlist_t &local,
-                                        const nixl_meta_dlist_t &remote,
-                                        const std::string &remote_agent,
-                                        nixlBackendReqH* &handle,
-                                        uintptr_t &handle_gpu,
-                                        const nixl_opt_b_args_t* opt_args=nullptr
-                                      ) = 0;
-
         // Posting a request, which completes the async handle creation and posts it
         virtual nixl_status_t postXfer (const nixl_xfer_op_t &operation,
                                         const nixl_meta_dlist_t &local,
