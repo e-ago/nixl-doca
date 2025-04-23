@@ -85,7 +85,7 @@ class nixlBackendEngine {
         // Determines if a backend supports progress thread.
         virtual bool supportsProgTh () const = 0;
 
-        // Determines if a backend supports posting tranfers requests from GPU.
+        // Determines if a backend supports posting transfers requests from GPU.
         virtual bool supportsGpuInitiated () const = 0;
 
         virtual nixl_mem_list_t getSupportedMems () const = 0;
