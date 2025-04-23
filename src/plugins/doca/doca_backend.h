@@ -159,6 +159,7 @@ class nixlDocaEngine : public nixlBackendEngine {
                 uint32_t devId;
                 uint32_t start_pos;
                 uint32_t end_pos;
+                uintptr_t backendHandleGpu;
 
                 nixlDocaBckndReq() : nixlLinkElem(), nixlBackendReqH() {
                 }
@@ -195,7 +196,7 @@ class nixlDocaEngine : public nixlBackendEngine {
         bool supportsNotif () const { return false; }
         bool supportsProgTh () const { return false; }
         bool supportsGpuInitiated () const { return true; }
-        
+
         nixl_mem_list_t getSupportedMems () const;
 
         /* Object management */
@@ -247,6 +248,8 @@ class nixlDocaEngine : public nixlBackendEngine {
 
         nixl_status_t checkXfer (nixlBackendReqH* handle);
         nixl_status_t releaseReqH(nixlBackendReqH* handle);
+
+        nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl);
 
         int progress();
 

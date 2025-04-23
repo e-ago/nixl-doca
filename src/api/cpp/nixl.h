@@ -220,42 +220,6 @@ class nixlAgent {
                        const std::string &remote_agent,
                        nixlXferReqH* &req_hndl,
                        const nixl_opt_args_t* extra_params = nullptr) const;
-
-        /**
-         * @brief  A combined API, to create a transfer request from two descriptor lists.
-         *         NIXL will prepare each side and create a transfer handle `req_hndl`.
-         *         The below set of operations are equivalent:
-         *           1. A sequence of prepXferDlist & makeXferReq:
-         *              prepXferDlist(NIXL_INIT_AGENT, local_desc, local_desc_hndl)
-         *              prepXferDlist("Agent-remote/self", remote_desc, remote_desc_hndl)
-         *              makeXferReq(NIXL_WRITE, local_desc_hndl, list of all local indices,
-         *                          remote_desc_hndl, list of all remote_indices, req_hndl)
-         *           2. A CreateXfer:
-         *              createXferReq(NIXL_WRITE, local_desc, remote_desc,
-         *                            "Agent-remote/self", req_hndl)
-         *
-         *         If there are common descriptors across different transfer requests, using
-         *         createXfer will result in repeated computation, such as validity checks and
-         *         pre-processing done in the preparation step. If a list of backends hints is
-         *         provided (via extra_params), the selection is limited to the specified backends.
-         *         Optionally, a notification message can also be provided through extra_params.
-         *
-         * @param  operation      Operation for transfer (e.g., NIXL_WRITE)
-         * @param  local_descs    Local descriptor list
-         * @param  remote_descs   Remote (or loopback) descriptor list
-         * @param  remote_agent   Remote (or self) agent name for accessing the remote (local) data
-         * @param  req_hndl [out] Transfer request GPU memory handle output
-         * @param  extra_params   Optional extra parameters used in creating a transfer request
-         * @return nixl_status_t  Error code if call was not successful
-         */
-         nixl_status_t
-         createXferReq (const nixl_xfer_op_t &operation,
-                        const nixl_xfer_dlist_t &local_descs,
-                        const nixl_xfer_dlist_t &remote_descs,
-                        const std::string &remote_agent,
-                        nixlXferReqHGpu* &req_hndl,
-                        const nixl_opt_args_t* extra_params = nullptr) const;
-
         /*** Operations on prepared Transfer Request ***/
 
         /**
@@ -294,6 +258,17 @@ class nixlAgent {
         nixl_status_t
         queryXferBackend (const nixlXferReqH* req_hndl,
                           nixlBackendH* &backend) const;
+
+        /**
+         * @brief  Get the XferReqH for GPU communications created by the backend.
+         *
+         * @param  req_hndl      Transfer request handle obtained from makeXferReq/createXferReq
+         * @param  gpu_hndl [out] GPU handler for the input transfer request
+         * @return nixl_status_t Error code if call was not successful
+         */
+        nixl_status_t
+        getGpuXferH (const nixlXferReqH* req_hndl,
+                     nixlXferReqHGpu* gpu_hndl) const;
 
         /**
          * @brief  Release the transfer request `req_hndl`. If the transfer is active,

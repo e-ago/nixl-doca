@@ -123,7 +123,7 @@ class nixlBackendEngine {
                                         const nixl_meta_dlist_t &remote,
                                         const std::string &remote_agent,
                                         nixlBackendReqH* &handle,
-                                        uintptr_t &handle_gpu,    
+                                        uintptr_t &handle_gpu,
                                         const nixl_opt_b_args_t* opt_args=nullptr
                                       ) = 0;
 
@@ -135,13 +135,15 @@ class nixlBackendEngine {
                                         nixlBackendReqH* &handle,
                                         const nixl_opt_b_args_t* opt_args=nullptr
                                        ) = 0;
- 
+
         // Use a handle to progress backend engine and see if a transfer is completed or not
         virtual nixl_status_t checkXfer(nixlBackendReqH* handle) = 0;
 
         //Backend aborts the transfer if necessary, and destructs the relevant objects
         virtual nixl_status_t releaseReqH(nixlBackendReqH* handle) = 0;
-
+        
+        //Return GPU handler for Xfer Request Handler, if supported
+        virtual nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl) = 0;
 
         // *** Needs to be implemented if supportsRemote() is true *** //
 

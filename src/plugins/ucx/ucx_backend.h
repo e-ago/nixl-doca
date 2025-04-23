@@ -248,7 +248,7 @@ class nixlUcxEngine : public nixlBackendEngine {
                                     const nixl_opt_b_args_t* opt_args) {
             return NIXL_ERR_NOT_SUPPORTED;
         }
-    
+
         nixl_status_t postXfer (const nixl_xfer_op_t &operation,
                                 const nixl_meta_dlist_t &local,
                                 const nixl_meta_dlist_t &remote,
@@ -258,6 +258,10 @@ class nixlUcxEngine : public nixlBackendEngine {
 
         nixl_status_t checkXfer (nixlBackendReqH* handle);
         nixl_status_t releaseReqH(nixlBackendReqH* handle);
+
+        nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl) {
+            return NIXL_ERR_NOT_SUPPORTED;
+        }
 
         int progress();
 

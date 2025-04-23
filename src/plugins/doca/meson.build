@@ -54,4 +54,3 @@ endif
 doca_backend_interface = declare_dependency(link_with: doca_backend_lib)
 install_headers('public/backend_plugin_doca_common.h', install_dir: prefix_inc + '/backend')
 install_headers('public/backend_plugin_doca_device.cuh', install_dir: prefix_inc + '/backend')
-  

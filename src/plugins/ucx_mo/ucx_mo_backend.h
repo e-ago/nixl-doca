@@ -226,6 +226,10 @@ public:
     nixl_status_t checkXfer (nixlBackendReqH* handle);
     nixl_status_t releaseReqH(nixlBackendReqH* handle);
 
+    nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl) {
+        return NIXL_ERR_NOT_SUPPORTED;
+    }
+
     int progress();
 
     nixl_status_t getNotifs(notif_list_t &notif_list);

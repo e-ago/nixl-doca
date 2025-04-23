@@ -184,5 +184,9 @@ class nixlGdsEngine : public nixlBackendEngine {
 
         nixl_status_t checkXfer(nixlBackendReqH* handle);
         nixl_status_t releaseReqH(nixlBackendReqH* handle);
+
+        nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl) {
+            return NIXL_ERR_NOT_SUPPORTED;
+        }
 };
 #endif

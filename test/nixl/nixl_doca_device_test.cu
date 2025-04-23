@@ -174,7 +174,8 @@ int main(int argc, char *argv[]) {
     nixl_blob_t             remote_desc;
     nixl_blob_t             metadata;
     nixl_blob_t             remote_metadata;
-    nixlXferReqHGpu *gtreq;
+    nixlXferReqH* req_hndl;
+    nixlXferReqHGpu gtreq;
 
     /** NIXL declarations */
     /** Agent and backend creation parameters */
@@ -288,9 +289,10 @@ int main(int argc, char *argv[]) {
 
         std::cout << " Create transfer request with DOCA backend\n ";
 
+        extra_params.gpuInitiated = true;
         PUSH_RANGE("createXferReqGpu", 1)
         ret = agent.createXferReq(NIXL_WRITE, dram_initiator_doca, dram_target_doca,
-                                  "target", gtreq, &extra_params);
+                                  "target", req_hndl, &extra_params);
         POP_RANGE
         if (ret != NIXL_SUCCESS) {
             std::cerr << "Error creating transfer request\n";
@@ -298,9 +300,12 @@ int main(int argc, char *argv[]) {
         }
 
         std::cout << "Launch initiator send kernel on stream\n";
+
+        agent.getGpuXferH(req_hndl, &gtreq);
+
         /* Extend to all buffers */
         PUSH_RANGE("InitKernels", 2)
-        launch_initiator_send_kernel_v2(stream, buf[0].addr, buf[0].len, gtreq->backendHandleGpu);
+        launch_initiator_send_kernel_v2(stream, buf[0].addr, buf[0].len, gtreq);
         POP_RANGE
     }
 

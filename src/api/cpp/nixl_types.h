@@ -29,10 +29,7 @@ class nixlBackendH;
 class nixlXferReqH;
 class nixlAgentData;
 
-typedef struct nixlXferReqHGpu {
-    uintptr_t backendHandleGpu;
-    nixlXferReqH *treq;
-} nixlXferReqHGpu;
+typedef uintptr_t nixlXferReqHGpu;
 
 /*** NIXL memory type, operation and status enums ***/
 
@@ -144,6 +141,11 @@ class nixlAgentOptionalArgs {
          * @var Backend custom parameter
          */
         nixl_blob_t customParam;
+
+        /**
+         * @var Backend enable GPU initiated communications
+         */
+        bool gpuInitiated = false;
 };
 /**
  * @brief A typedef for a nixlAgentOptionalArgs
