@@ -268,7 +268,7 @@ class nixlAgent {
          */
         nixl_status_t
         getGpuXferH (const nixlXferReqH* req_hndl,
-                     nixlXferReqHGpu* gpu_hndl) const;
+                     nixlXferReqHGpu* &gpu_hndl) const;
 
         /**
          * @brief  Release the transfer request `req_hndl`. If the transfer is active,

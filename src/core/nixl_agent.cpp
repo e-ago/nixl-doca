@@ -612,12 +612,10 @@ nixlAgent::createXferReq(const nixl_xfer_op_t &operation,
                          const nixl_xfer_dlist_t &remote_descs,
                          const std::string &remote_agent,
                          nixlXferReqH* &req_hndl,
-                         const nixl_opt_args_t* extra_params) const
-{
+                         const nixl_opt_args_t* extra_params) const {
     nixl_status_t     ret1, ret2;
     nixl_opt_b_args_t opt_args;
     backend_set_t*    backend_set = new backend_set_t();
-    nixlXferReqH *handle;
 
     req_hndl = nullptr;
 
@@ -661,7 +659,7 @@ nixlAgent::createXferReq(const nixl_xfer_op_t &operation,
     // TODO: merge descriptors back to back in memory (like makeXferReq).
     // TODO [Perf]: Avoid heap allocation on the datapath, maybe use a mem pool
 
-    handle = new nixlXferReqH;
+    nixlXferReqH *handle   = new nixlXferReqH;
 
     handle->initiatorDescs = new nixl_meta_dlist_t (
                                      local_descs.getType(),
@@ -828,7 +826,11 @@ nixlAgent::queryXferBackend(const nixlXferReqH* req_hndl,
 
 nixl_status_t
 nixlAgent::getGpuXferH (const nixlXferReqH* req_hndl,
-             nixlXferReqHGpu* gpu_hndl) const {
+             nixlXferReqHGpu* &gpu_hndl) const {
+
+    if (req_hndl->engine->supportsGpuInitiated() == false)
+        return NIXL_ERR_NOT_SUPPORTED;
+
     req_hndl->engine->getGpuXferH(req_hndl->backendHandle, gpu_hndl);
 
     return NIXL_SUCCESS;

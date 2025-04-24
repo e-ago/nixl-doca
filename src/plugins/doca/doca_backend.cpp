@@ -978,14 +978,16 @@ nixl_status_t nixlDocaEngine::checkXfer(nixlBackendReqH* handle)
 	return NIXL_SUCCESS;
 }
 
-nixl_status_t nixlDocaEngine::getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl)
+nixl_status_t nixlDocaEngine::getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* &gpu_hndl)
 {
 	nixlDocaBckndReq *treq = (nixlDocaBckndReq *) handle;
+	nixlXferReqHGpu* tmp = new nixlXferReqHGpu;
 
 	if (treq->backendHandleGpu == 0)
 		return NIXL_ERR_NOT_SUPPORTED;
 
-	(*gpu_hndl) = treq->backendHandleGpu;
+	*tmp = treq->backendHandleGpu;
+	gpu_hndl = tmp;
 
 	return NIXL_SUCCESS;
 }

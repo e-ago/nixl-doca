@@ -86,7 +86,7 @@ class nixlBackendEngine {
         virtual bool supportsProgTh () const = 0;
 
         // Determines if a backend supports posting transfers requests from GPU.
-        virtual bool supportsGpuInitiated () const = 0;
+        virtual bool supportsGpuInitiated () const { return false; }
 
         virtual nixl_mem_list_t getSupportedMems () const = 0;
 
@@ -133,7 +133,9 @@ class nixlBackendEngine {
         virtual nixl_status_t releaseReqH(nixlBackendReqH* handle) = 0;
 
         //Return GPU handler for Xfer Request Handler, if supported
-        virtual nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl) = 0;
+        virtual nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* &gpu_hndl) {
+            return NIXL_ERR_BACKEND;
+        }
 
         // *** Needs to be implemented if supportsRemote() is true *** //
 

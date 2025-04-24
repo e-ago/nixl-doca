@@ -124,10 +124,6 @@ class nixlGdsEngine : public nixlBackendEngine {
             return false;
         }
 
-        bool supportsGpuInitiated () const {
-            return false;
-        }
-
         nixl_mem_list_t getSupportedMems() const {
             nixl_mem_list_t mems;
             mems.push_back(DRAM_SEG);
@@ -174,9 +170,5 @@ class nixlGdsEngine : public nixlBackendEngine {
 
         nixl_status_t checkXfer(nixlBackendReqH* handle);
         nixl_status_t releaseReqH(nixlBackendReqH* handle);
-
-        nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl) {
-            return NIXL_ERR_NOT_SUPPORTED;
-        }
 };
 #endif

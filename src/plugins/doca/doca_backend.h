@@ -241,7 +241,7 @@ class nixlDocaEngine : public nixlBackendEngine {
         nixl_status_t checkXfer (nixlBackendReqH* handle);
         nixl_status_t releaseReqH(nixlBackendReqH* handle);
 
-        nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* gpu_hndl);
+        nixl_status_t getGpuXferH(const nixlBackendReqH* handle, nixlXferReqHGpu* &gpu_hndl);
 
         int progress();
 

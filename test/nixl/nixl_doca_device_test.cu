@@ -175,7 +175,7 @@ int main(int argc, char *argv[]) {
     nixl_blob_t             metadata;
     nixl_blob_t             remote_metadata;
     nixlXferReqH* req_hndl;
-    nixlXferReqHGpu gtreq;
+    nixlXferReqHGpu *gtreq;
 
     /** NIXL declarations */
     /** Agent and backend creation parameters */
@@ -301,11 +301,11 @@ int main(int argc, char *argv[]) {
 
         std::cout << "Launch initiator send kernel on stream\n";
 
-        agent.getGpuXferH(req_hndl, &gtreq);
+        agent.getGpuXferH(req_hndl, gtreq);
 
         /* Extend to all buffers */
         PUSH_RANGE("InitKernels", 2)
-        launch_initiator_send_kernel_v2(stream, buf[0].addr, buf[0].len, gtreq);
+        launch_initiator_send_kernel_v2(stream, buf[0].addr, buf[0].len, *gtreq);
         POP_RANGE
     }
 
